@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Uncompressed raw ITD files (too big for GitHub; the .txt.gz versions are committed)
+src/raw-data/*.txt
+
+# Generated JSON output (run `npm run build` to regenerate)
+output/
+
+# Logs
+npm-debug.log*
+*.log
+
+# Environment
+.env
+.env.*
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
