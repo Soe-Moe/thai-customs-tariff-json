@@ -1,96 +1,38 @@
 #!/usr/bin/env node
 
-const fs = require("fs");
-const path = require("path");
-const { readRawText } = require("./lib/raw_file");
+const { parseArgs } = require("./lib/cli");
+const { requireRawFiles } = require("./lib/raw_file");
+const { formatBilingualDate } = require("./lib/dates");
+const {
+  loadDescriptionMap,
+  getDescription,
+} = require("./lib/tariff_descriptions");
+const {
+  readDutyLines,
+  parseDutyKey,
+  parseDateRange,
+  isActiveOn,
+  extractLegalRef,
+  formatRatePercent,
+  formatDutyDisplay,
+  keepPreferredRecord,
+  stripInternalFields,
+} = require("./lib/duty_rates");
+const { writeJsonFiles, groupBy } = require("./lib/output");
 
-const args = process.argv.slice(2);
-let baseDir = "./src/raw-data";
-let outputDir = "./output/fta_json";
-
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === "-b" || args[i] === "--base-dir") baseDir = args[++i];
-  else if (args[i] === "-o" || args[i] === "--output-dir")
-    outputDir = args[++i];
-}
-
-const resolvedBaseDir = path.resolve(process.cwd(), baseDir);
-const resolvedOutputDir = path.resolve(process.cwd(), outputDir);
-const patchesDir = path.join(resolvedBaseDir, "patches");
-
-const dutyFile = path.join(resolvedBaseDir, "REFDRT_Open_20220101.txt");
-const tariffFile = path.join(resolvedBaseDir, "REFTRC_Open.txt");
-const prvFile = path.join(resolvedBaseDir, "REFPRV_Open.txt");
-
-if (!fs.existsSync(resolvedOutputDir)) {
-  fs.mkdirSync(resolvedOutputDir, { recursive: true });
-}
-
-const CURRENT_DATE_INT = 20260928;
+const { baseDir, outputDir, date } = parseArgs("build_fta_full_data.js", {
+  baseDir: "./src/raw-data",
+  outputDir: "./output/fta_json",
+  date: null,
+});
+const files = requireRawFiles(baseDir, ["duty", "tariff"]);
 
 // 1. Goods Descriptions (REFTRC)
 console.log(`==> [1/3] Reading Descriptions...`);
-const trcText = readRawText(tariffFile);
-const trcLines = trcText
-  .split(/\r?\n/)
-  .filter((line) => line.trim().length > 10);
-const descriptionMap = new Map();
-
-for (let i = 0; i < trcLines.length; i++) {
-  const line = trcLines[i];
-  const hsMatch = line.match(/^(\d{8,11})/);
-  if (!hsMatch) continue;
-
-  const rawHs = hsMatch[1];
-  const hs8 = rawHs.substring(0, 8);
-  const hs10 = rawHs.length >= 10 ? rawHs.substring(0, 10) : hs8;
-
-  const thaiMatches = line.match(/([\u0E00-\u0E7F\s\-()–—.+%/]+)/g);
-  let descTh = thaiMatches
-    ? thaiMatches
-        .map((s) => s.trim())
-        .filter((s) => s.length > 1)
-        .join(" ")
-        .trim()
-    : "";
-
-  const engMatches = line.match(/([a-zA-Z\s\-(),.+%/]{3,})/g);
-  let descEn = engMatches
-    ? engMatches
-        .map((s) => s.trim())
-        .filter((s) => s.length > 2)
-        .join(" ")
-        .trim()
-    : "";
-
-  const descObj = {
-    th: descTh || "- - ไม่ระบุรายการ",
-    en: descEn || "- - Unspecified",
-  };
-  descriptionMap.set(hs10, descObj);
-  if (!descriptionMap.has(hs8)) descriptionMap.set(hs8, descObj);
-}
+const descriptionMap = loadDescriptionMap(files.tariff);
 
 // 2. Read Duty Rates (REFDRT)
-console.log(`==> [2/3] Reading Duty Rates and checking 2026 validity...`);
-const drtText = readRawText(dutyFile);
-const drtLines = drtText
-  .split(/\r?\n/)
-  .filter((line) => line.trim().length > 30);
-
-function formatBilingualDate(dateStr) {
-  if (!dateStr || dateStr === "99999999") {
-    return { iso: null, th: "เป็นต้นไป", en: "Indefinite / Ongoing" };
-  }
-  const yyyy = parseInt(dateStr.substring(0, 4), 10);
-  const mm = dateStr.substring(4, 6);
-  const dd = dateStr.substring(6, 8);
-  return {
-    iso: `${yyyy}-${mm}-${dd}`,
-    th: `${dd}/${mm}/${yyyy + 543}`,
-    en: `${dd}/${mm}/${yyyy}`,
-  };
-}
+console.log(`==> [2/3] Reading Duty Rates active on ${date}...`);
 
 const MULTI_CODES = new Set([
   "AAN",
@@ -145,99 +87,43 @@ const BI_CODES = new Set([
 const multilateralMap = new Map();
 const bilateralMap = new Map();
 
-for (let i = 0; i < drtLines.length; i++) {
-  const line = drtLines[i];
-
-  const hsCode = line.substring(4, 12).trim();
-  const tariffSeqStr = line.substring(12, 17).trim();
-  const tariffSeq = parseInt(tariffSeqStr, 10) || 0;
-  const privilegeCode = line.substring(17, 20).trim();
+for (const line of readDutyLines(files.duty)) {
+  const { hsCode, tariffSeqStr, tariffSeq, privilegeCode } =
+    parseDutyKey(line);
 
   const isMulti = MULTI_CODES.has(privilegeCode);
   const isBi = BI_CODES.has(privilegeCode);
   if (!isMulti && !isBi) continue;
 
-  const rateChunk = line.substring(21, 58);
-  const rateMatch = rateChunk.match(/(\d{1,2}\.\d{2,3})/);
+  const rateMatch = line.substring(21, 58).match(/(\d{1,2}\.\d{2,3})/);
   const dutyRate = rateMatch ? parseFloat(rateMatch[1]) : 0.0;
-
-  // Find the 16-digit date pair
-  const allDatePairs = [...line.matchAll(/(20\d{6})(20\d{6}|99999999)/g)];
-  let rawStartDate = "20220101";
-  let rawEndDate = "99999999";
-
-  if (allDatePairs.length > 0) {
-    const lastPair = allDatePairs[allDatePairs.length - 1];
-    rawStartDate = lastPair[1];
-    rawEndDate = lastPair[2];
-  }
-
-  const startInt = parseInt(rawStartDate, 10);
-  const endInt = parseInt(rawEndDate, 10);
-  const isActiveCurrently =
-    CURRENT_DATE_INT >= startInt && CURRENT_DATE_INT <= endInt;
+  const dateRange = parseDateRange(line);
 
   const hasCondition =
     line.includes("ต้องตรวจสอบ") ||
     line.includes("ท้ายประกาศ") ||
     privilegeCode === "ACN";
 
-  const desc = descriptionMap.get(hsCode) || {
-    th: "- - รายการตามพิกัด",
-    en: "- - Tariff Item Description",
-  };
-
-  const rateFormatted =
-    dutyRate % 1 === 0
-      ? `${dutyRate}%`
-      : `${dutyRate.toFixed(3).replace(/\.?0+$/, "")}%`;
-  const displayRateTextTh =
-    dutyRate === 0
-      ? hasCondition
-        ? "** ยกเว้นอากร"
-        : "ยกเว้นอากร"
-      : hasCondition
-        ? `** ${rateFormatted}`
-        : `${rateFormatted}`;
-  const displayRateTextEn =
-    dutyRate === 0
-      ? hasCondition
-        ? "** Duty Exempted"
-        : "Duty Exempted"
-      : hasCondition
-        ? `** ${rateFormatted}`
-        : `${rateFormatted}`;
-
-  let legalRef = "";
-  const refIndex = line.indexOf("ม.14");
-  if (refIndex !== -1) {
-    const tailPart = line.substring(refIndex);
-    const dateIndex = tailPart.search(/\b(20\d{6}|99999999)\b/);
-    legalRef = (
-      dateIndex !== -1
-        ? tailPart.substring(0, dateIndex)
-        : tailPart.substring(0, 50)
-    ).trim();
-  }
+  const rateText = formatRatePercent(dutyRate);
+  const legalRef = extractLegalRef(line, "ม.14", 50);
 
   const record = {
     hs_code: hsCode,
     tariff_seq: tariffSeqStr,
     privilege_code: privilegeCode,
     agreement_name: { th: privilegeCode, en: privilegeCode },
-    description: { th: desc.th, en: desc.en },
+    description: getDescription(descriptionMap, hsCode),
     duty_rate: {
       percentage: dutyRate,
       is_exempt: dutyRate === 0,
-      display_th: displayRateTextTh,
-      display_en: displayRateTextEn,
+      ...formatDutyDisplay(dutyRate === 0, hasCondition, rateText, rateText),
     },
     legal_notification: {
       th: legalRef || "ม.14",
       en: `Sec.14 (${privilegeCode})`,
     },
-    effective_date: formatBilingualDate(rawStartDate),
-    expiry_date: formatBilingualDate(rawEndDate),
+    effective_date: formatBilingualDate(dateRange.rawStartDate),
+    expiry_date: formatBilingualDate(dateRange.rawEndDate),
     restrictions: {
       has_condition: hasCondition,
       note_th: hasCondition
@@ -247,33 +133,13 @@ for (let i = 0; i < drtLines.length; i++) {
         ? "Country of Origin eligibility must be verified according to Ministry of Finance Notification Annex"
         : null,
     },
-    _is_active: isActiveCurrently,
-    _start_int: startInt,
+    _is_active: isActiveOn(dateRange, date),
+    _start_int: dateRange.startInt,
   };
 
   const groupKey = `${hsCode}_${privilegeCode}`;
-
-  function updateTargetMap(targetMap) {
-    if (!targetMap.has(groupKey)) {
-      targetMap.set(groupKey, record);
-    } else {
-      const existing = targetMap.get(groupKey);
-      if (!existing._is_active && record._is_active) {
-        targetMap.set(groupKey, record);
-      } else if (existing._is_active && record._is_active) {
-        if (record._start_int >= existing._start_int) {
-          targetMap.set(groupKey, record);
-        }
-      } else if (!existing._is_active && !record._is_active) {
-        if (tariffSeq > parseInt(existing.tariff_seq, 10)) {
-          targetMap.set(groupKey, record);
-        }
-      }
-    }
-  }
-
-  if (isMulti) updateTargetMap(multilateralMap);
-  if (isBi) updateTargetMap(bilateralMap);
+  if (isMulti) keepPreferredRecord(multilateralMap, groupKey, record, tariffSeq);
+  if (isBi) keepPreferredRecord(bilateralMap, groupKey, record, tariffSeq);
 }
 
 // 3. Add the new JTEPA codes (J1E, J1P, J2E, J2P, J3E, J3P) per the 2025 announcement
@@ -355,64 +221,31 @@ newJtepaRecords.forEach((rec) => {
   bilateralMap.set(`${rec.hs_code}_${rec.privilege_code}`, rec);
 });
 
-function cleanInternalFields(records) {
-  return records.map((r) => {
-    const { _is_active, _start_int, ...clean } = r;
-    return clean;
-  });
-}
-
-const multiRecords = cleanInternalFields(
-  Array.from(multilateralMap.values()),
-).sort(
-  (a, b) =>
-    a.hs_code.localeCompare(b.hs_code) ||
-    a.privilege_code.localeCompare(b.privilege_code),
+const byCodeThenPrivilege = (a, b) =>
+  a.hs_code.localeCompare(b.hs_code) ||
+  a.privilege_code.localeCompare(b.privilege_code);
+const multiRecords = stripInternalFields([...multilateralMap.values()]).sort(
+  byCodeThenPrivilege,
 );
-const biRecords = cleanInternalFields(Array.from(bilateralMap.values())).sort(
-  (a, b) =>
-    a.hs_code.localeCompare(b.hs_code) ||
-    a.privilege_code.localeCompare(b.privilege_code),
+const biRecords = stripInternalFields([...bilateralMap.values()]).sort(
+  byCodeThenPrivilege,
 );
 
-function groupRecordsByHs(records) {
-  const grouped = {};
-  records.forEach((r) => {
-    if (!grouped[r.hs_code]) grouped[r.hs_code] = [];
-    grouped[r.hs_code].push(r);
-  });
-  return grouped;
-}
-
-fs.writeFileSync(
-  path.join(resolvedOutputDir, "fta_multilateral_full.json"),
-  JSON.stringify(multiRecords, null, 2),
-  "utf8",
-);
-fs.writeFileSync(
-  path.join(resolvedOutputDir, "fta_bilateral_full.json"),
-  JSON.stringify(biRecords, null, 2),
-  "utf8",
-);
-fs.writeFileSync(
-  path.join(resolvedOutputDir, "fta_by_hscode_grouped.json"),
-  JSON.stringify(
-    {
-      metadata: {
-        generated_at: new Date().toISOString(),
-        multilateral_count: multiRecords.length,
-        bilateral_count: biRecords.length,
-      },
-      multilateral: groupRecordsByHs(multiRecords),
-      bilateral: groupRecordsByHs(biRecords),
+writeJsonFiles(outputDir, {
+  "fta_multilateral_full.json": multiRecords,
+  "fta_bilateral_full.json": biRecords,
+  "fta_by_hscode_grouped.json": {
+    metadata: {
+      generated_at: new Date().toISOString(),
+      multilateral_count: multiRecords.length,
+      bilateral_count: biRecords.length,
     },
-    null,
-    2,
-  ),
-  "utf8",
-);
+    multilateral: groupBy(multiRecords, "hs_code"),
+    bilateral: groupBy(biRecords, "hs_code"),
+  },
+});
 
-console.log(`==> Completed: ${resolvedOutputDir}`);
+console.log(`==> Completed: ${outputDir}`);
 console.log(`   - Multilateral Records : ${multiRecords.length}`);
 console.log(
   `   - Bilateral Records    : ${biRecords.length} (includes J1E, J1P, TAU)`,

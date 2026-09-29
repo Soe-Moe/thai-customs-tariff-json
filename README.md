@@ -133,12 +133,13 @@ node src/build_electronic_permits.js -i ./src/raw-data/REFPMG_Open.txt -o ./outp
 
 ### CLI options
 
-| Flag                 | Description                                                                                                                                                   | Default                          |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| `-b`, `--base-dir`   | Folder containing the raw data files                                                                                                                          | `./src/raw-data`                 |
-| `-o`, `--output-dir` | Folder to write JSON to (`--output` file path for `extract_fta_privilege_codes.js`)                                                                           | varies per script                |
-| `-i`, `--input`      | Input permit file, `.txt` or `.txt.gz` (`build_electronic_permits.js` only)                                                                                   | `./src/raw-data/REFPMG_Open.txt` |
-| `-h`, `--help`       | Show usage (`build_asean_atiga_rates.js`, `build_emergency_decree_rates.js`, `extract_fta_privilege_codes.js`, `build_hs_chapters.js`, `build_hs_catalog.js`) |                                  |
+| Flag                 | Description                                                                                                                         | Default                          |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `-b`, `--base-dir`   | Folder containing the raw data files                                                                                                | `./src/raw-data`                 |
+| `-o`, `--output-dir` | Folder to write JSON to (`--output` file path for `extract_fta_privilege_codes.js`)                                                 | varies per script                |
+| `-i`, `--input`      | Input permit file, `.txt` or `.txt.gz` (`build_electronic_permits.js` only)                                                         | `./src/raw-data/REFPMG_Open.txt` |
+| `-d`, `--date`       | Reference date `YYYYMMDD` for picking the rate in force when a tariff line has several (FTA, WTO, ASEAN, Section 12, Emergency Decree) | today                            |
+| `-h`, `--help`       | Show usage                                                                                                                          |                                  |
 
 > **Note:** The generated JSON is large (the full FTA output is over 170 MB), which is over GitHub's 100 MB file limit. `output/` is in `.gitignore`, so generate it locally with `npm run build`.
 
@@ -364,7 +365,7 @@ thai-customs-tariff-json/
 | Thai text shows as `�` or garbled characters              | The raw files must be the original TIS-620 files. Don't re-save them as UTF-8 before compressing or parsing                  |
 | `JavaScript heap out of memory`                           | Give Node more memory: `node --max-old-space-size=8192 src/build_fta_full_data.js`                                           |
 | `Patches folder not found`                                | Only a notice. The FTA scripts still run using `REFPRV_Open.txt` alone                                                       |
-| A newer ITD release has a different date in the file name | Rename it to `REFDRT_Open_20220101.txt` (then gzip it), or update `dutyFile` in the scripts                                  |
+| A newer ITD release has a different date in the file name | Rename it to `REFDRT_Open_20220101.txt` (then gzip it), or update `RAW_FILES.duty` in `src/lib/raw_file.js`                                  |
 
 ## Data source
 

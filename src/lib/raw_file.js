@@ -1,6 +1,15 @@
 const fs = require("fs");
+const path = require("path");
 const zlib = require("zlib");
 const iconv = require("iconv-lite");
+
+// Raw ITD master file names (each may also be stored as <name>.gz)
+const RAW_FILES = {
+  duty: "REFDRT_Open_20220101.txt",
+  tariff: "REFTRC_Open.txt",
+  privilege: "REFPRV_Open.txt",
+  permit: "REFPMG_Open.txt",
+};
 
 // Resolve a raw data file path, falling back to its gzipped version (<file>.gz)
 function resolveRawFile(filePath) {
@@ -25,4 +34,27 @@ function readRawText(filePath) {
   return iconv.decode(buffer, "tis-620");
 }
 
-module.exports = { resolveRawFile, rawFileExists, readRawText };
+// Paths of the given RAW_FILES entries in baseDir; exits if any of them is missing
+function requireRawFiles(baseDir, keys) {
+  const files = {};
+  const missing = [];
+  for (const key of keys) {
+    files[key] = path.join(baseDir, RAW_FILES[key]);
+    if (!rawFileExists(files[key])) missing.push(RAW_FILES[key]);
+  }
+  if (missing.length > 0) {
+    console.error(
+      `Error: Required files are missing in ${baseDir}: ${missing.join(", ")}`,
+    );
+    process.exit(1);
+  }
+  return files;
+}
+
+module.exports = {
+  RAW_FILES,
+  resolveRawFile,
+  rawFileExists,
+  readRawText,
+  requireRawFiles,
+};

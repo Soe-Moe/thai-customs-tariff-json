@@ -1,69 +1,23 @@
 #!/usr/bin/env node
 
-const fs = require("fs");
 const path = require("path");
-const { rawFileExists, readRawText } = require("./lib/raw_file");
+const { parseArgs } = require("./lib/cli");
+const {
+  RAW_FILES,
+  rawFileExists,
+  readRawText,
+  requireRawFiles,
+} = require("./lib/raw_file");
+const { formatBilingualDate } = require("./lib/dates");
+const { UNIT_MAP, readDutyLines } = require("./lib/duty_rates");
+const { writeJsonFiles, groupBy } = require("./lib/output");
 
-// Parse CLI arguments
-const args = process.argv.slice(2);
-let baseDir = "./src/raw-data";
-let outputDir = "./output/hs_catalog_json";
-
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === "-b" || args[i] === "--base-dir") baseDir = args[++i];
-  else if (args[i] === "-o" || args[i] === "--output-dir")
-    outputDir = args[++i];
-  else if (args[i] === "-h" || args[i] === "--help") {
-    console.log(`
-Usage:
-  node build_hs_catalog.js [-b <raw-data-folder>] [-o <output-folder>]
-
-Default:
-  -b ./src/raw-data
-  -o ./output/hs_catalog_json
-    `);
-    process.exit(0);
-  }
-}
-
-const resolvedBaseDir = path.resolve(process.cwd(), baseDir);
-const resolvedOutputDir = path.resolve(process.cwd(), outputDir);
-
-const tariffFile = path.join(resolvedBaseDir, "REFTRC_Open.txt");
-const dutyFile = path.join(resolvedBaseDir, "REFDRT_Open_20220101.txt");
-
-if (!rawFileExists(tariffFile)) {
-  console.error(`Error: File not found: ${tariffFile}(.gz)`);
-  process.exit(1);
-}
-
-if (!fs.existsSync(resolvedOutputDir)) {
-  fs.mkdirSync(resolvedOutputDir, { recursive: true });
-}
-
-// Unit Mapping
-const UNIT_MAP = {
-  KGM: { th: "กิโลกรัม", en: "Kilogram" },
-  LTR: { th: "ลิตร", en: "Litre" },
-  MTR: { th: "เมตร", en: "Metre" },
-  NMB: { th: "จำนวน", en: "Number / Units" },
-  C62: { th: "ตัว / หน่วย", en: "Head / Pieces" },
-  TNE: { th: "ตัน", en: "Tonne" },
-};
-
-function formatBilingualDate(dateStr) {
-  if (!dateStr || dateStr === "99999999") {
-    return { iso: null, th: "เป็นต้นไป", en: "Indefinite / Ongoing" };
-  }
-  const yyyy = parseInt(dateStr.substring(0, 4), 10);
-  const mm = dateStr.substring(4, 6);
-  const dd = dateStr.substring(6, 8);
-  return {
-    iso: `${yyyy}-${mm}-${dd}`,
-    th: `${dd}/${mm}/${yyyy + 543}`,
-    en: `${dd}/${mm}/${yyyy}`,
-  };
-}
+const { baseDir, outputDir } = parseArgs("build_hs_catalog.js", {
+  baseDir: "./src/raw-data",
+  outputDir: "./output/hs_catalog_json",
+});
+const { tariff: tariffFile } = requireRawFiles(baseDir, ["tariff"]);
+const dutyFile = path.join(baseDir, RAW_FILES.duty);
 
 // REFTRC has no dash indents, so derive them from the HS code structure:
 //   Subheading (digits 5-6): "00" = not subdivided (0), "x0" = one dash (1),
@@ -90,12 +44,7 @@ function withIndent(desc, indent) {
 const dutyMap = new Map(); // HS code -> list of 000 rate variants
 if (rawFileExists(dutyFile)) {
   console.log(`==> [1/2] Reading MFN/General Duty Rates (REFDRT)...`);
-  const drtLines = readRawText(dutyFile)
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 30);
-
-  for (let i = 0; i < drtLines.length; i++) {
-    const line = drtLines[i];
+  for (const line of readDutyLines(dutyFile)) {
     if (line.substring(17, 20) !== "000") continue;
 
     const hsCode = line.substring(4, 12);
@@ -185,32 +134,17 @@ const catalogList = [...catalogMap.values()].sort((a, b) =>
   a.raw_code.localeCompare(b.raw_code),
 );
 
-// Group by chapter
-const catalogByChapter = {};
-catalogList.forEach((item) => {
-  if (!catalogByChapter[item.chapter]) {
-    catalogByChapter[item.chapter] = [];
-  }
-  catalogByChapter[item.chapter].push(item);
+const catalogByChapter = groupBy(catalogList, "chapter");
+
+writeJsonFiles(outputDir, {
+  "hs_catalog_full_list.json": catalogList,
+  "hs_catalog_by_chapter.json": catalogByChapter,
 });
-
-// Write JSON output
-fs.writeFileSync(
-  path.join(resolvedOutputDir, "hs_catalog_full_list.json"),
-  JSON.stringify(catalogList, null, 2),
-  "utf8",
-);
-
-fs.writeFileSync(
-  path.join(resolvedOutputDir, "hs_catalog_by_chapter.json"),
-  JSON.stringify(catalogByChapter, null, 2),
-  "utf8",
-);
 
 const withoutDuty = catalogList.filter((item) => !dutyMap.has(item.raw_code));
 
 console.log(`\n======================================================`);
-console.log(`==> HS Catalog written to: ${resolvedOutputDir}`);
+console.log(`==> HS Catalog written to: ${outputDir}`);
 console.log(
   `   1. hs_catalog_full_list.json   (${catalogList.length} tariff lines)`,
 );

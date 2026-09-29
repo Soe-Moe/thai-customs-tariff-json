@@ -1,25 +1,14 @@
 #!/usr/bin/env node
 
-const fs = require("fs");
 const path = require("path");
+const { parseArgs } = require("./lib/cli");
 const { readRawText } = require("./lib/raw_file");
+const { writeJsonFiles, groupBy } = require("./lib/output");
 
-const args = process.argv.slice(2);
-let inputPath = "./src/raw-data/REFPMG_Open.txt";
-let outputDir = "./output/permit_json";
-
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === "-i" || args[i] === "--input") inputPath = args[++i];
-  else if (args[i] === "-o" || args[i] === "--output-dir")
-    outputDir = args[++i];
-}
-
-const resolvedInput = path.resolve(process.cwd(), inputPath);
-const resolvedOutputDir = path.resolve(process.cwd(), outputDir);
-
-if (!fs.existsSync(resolvedOutputDir)) {
-  fs.mkdirSync(resolvedOutputDir, { recursive: true });
-}
+const { input, outputDir } = parseArgs("build_electronic_permits.js", {
+  input: "./src/raw-data/REFPMG_Open.txt",
+  outputDir: "./output/permit_json",
+});
 
 // Official NSW Tax ID map of Thai government agencies
 const AGENCY_TAX_MAP = {
@@ -76,7 +65,8 @@ const AGENCY_TAX_MAP = {
   },
 };
 
-function formatBilingualDate(dateStr) {
+// Unlike lib/dates, REFPMG shows an open-ended date as 99/99/9999
+function formatPermitDate(dateStr) {
   if (!dateStr || dateStr === "99999999") {
     return { iso: null, th: "99/99/9999", en: "99/99/9999" };
   }
@@ -95,18 +85,16 @@ function formatBilingualDate(dateStr) {
 }
 
 console.log(
-  `==> Reading REFPMG permit file: ${path.basename(resolvedInput)}`,
+  `==> Reading REFPMG permit file: ${path.basename(input)}`,
 );
-const text = readRawText(resolvedInput);
+const text = readRawText(input);
 const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 30);
 
 console.log(`==> Total lines read: ${lines.length}`);
 
-const permitsByHs = {};
 const flatPermitsList = [];
 
-for (let i = 0; i < lines.length; i++) {
-  const line = lines[i];
+for (const line of lines) {
 
   // HS Code: Byte 4 to 12 (8 digits)
   const rawHs = line.substring(4, 12).trim();
@@ -188,32 +176,22 @@ for (let i = 0; i < lines.length; i++) {
       th: conditionTh,
       en: conditionEn,
     },
-    effective_date: formatBilingualDate(rawStartDate),
-    expiry_date: formatBilingualDate(rawEndDate),
+    effective_date: formatPermitDate(rawStartDate),
+    expiry_date: formatPermitDate(rawEndDate),
   };
 
   flatPermitsList.push(record);
-
-  if (!permitsByHs[rawHs]) {
-    permitsByHs[rawHs] = [];
-  }
-  permitsByHs[rawHs].push(record);
 }
 
-// Write Output JSONs
-fs.writeFileSync(
-  path.join(resolvedOutputDir, "electronic_permits_flat.json"),
-  JSON.stringify(flatPermitsList, null, 2),
-  "utf8",
-);
-fs.writeFileSync(
-  path.join(resolvedOutputDir, "electronic_permits_by_hscode.json"),
-  JSON.stringify(permitsByHs, null, 2),
-  "utf8",
-);
+const permitsByHs = groupBy(flatPermitsList, "raw_hs_code");
+
+writeJsonFiles(outputDir, {
+  "electronic_permits_flat.json": flatPermitsList,
+  "electronic_permits_by_hscode.json": permitsByHs,
+});
 
 console.log(`\n======================================================`);
-console.log(`==> Filtering completed successfully: ${resolvedOutputDir}`);
+console.log(`==> Filtering completed successfully: ${outputDir}`);
 console.log(`   - flat records : ${flatPermitsList.length}`);
 console.log(`   - unique HS    : ${Object.keys(permitsByHs).length}`);
 console.log(`======================================================`);

@@ -2,42 +2,20 @@
 
 const fs = require("fs");
 const path = require("path");
-const { rawFileExists, readRawText } = require("./lib/raw_file");
+const { parseArgs } = require("./lib/cli");
+const { readRawText, requireRawFiles } = require("./lib/raw_file");
+const {
+  readPrivilegeLines,
+  parsePrivilegeLine,
+} = require("./lib/privileges");
+const { writeJson } = require("./lib/output");
 
-// Parse CLI arguments
-const args = process.argv.slice(2);
-let baseDir = "./src/raw-data";
-let outputPath = "./output/fta_privilege_dictionary.json";
-
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === "-b" || args[i] === "--base-dir") {
-    baseDir = args[++i];
-  } else if (args[i] === "-o" || args[i] === "--output") {
-    outputPath = args[++i];
-  } else if (args[i] === "-h" || args[i] === "--help") {
-    console.log(`
-Usage:
-  node extract_fta_privilege_codes.js [-b <raw-data-folder>] [-o <output-file.json>]
-
-Default:
-  -b ./src/raw-data
-  -o ./output/fta_privilege_dictionary.json
-    `);
-    process.exit(0);
-  }
-}
-
-const resolvedBaseDir = path.resolve(process.cwd(), baseDir);
-const resolvedOutputPath = path.resolve(process.cwd(), outputPath);
-const patchesDir = path.join(resolvedBaseDir, "patches");
-const masterPrvFile = path.join(resolvedBaseDir, "REFPRV_Open.txt");
-
-if (!rawFileExists(masterPrvFile)) {
-  console.error(
-    `Error: Base Privilege Master file not found: ${masterPrvFile}`,
-  );
-  process.exit(1);
-}
+const { baseDir, outputFile } = parseArgs("extract_fta_privilege_codes.js", {
+  baseDir: "./src/raw-data",
+  outputFile: "./output/fta_privilege_dictionary.json",
+});
+const patchesDir = path.join(baseDir, "patches");
+const { privilege: masterPrvFile } = requireRawFiles(baseDir, ["privilege"]);
 
 const multilateralCodes = new Map();
 const bilateralCodes = new Map();
@@ -122,19 +100,9 @@ function registerPrivilege(
 console.log(
   `==> [1/2] Reading Base Privilege Master: ${path.basename(masterPrvFile)}`,
 );
-const prvText = readRawText(masterPrvFile);
-const prvLines = prvText.split(/\r?\n/).filter((l) => l.trim().length > 5);
-
-for (let i = 0; i < prvLines.length; i++) {
-  const line = prvLines[i];
-  const code = line.substring(0, 3).trim();
-  const remaining = line.substring(3).trim();
-  const dateMatch = remaining.search(/\b20\d{6}\b/);
-  const rawDesc =
-    dateMatch !== -1
-      ? remaining.substring(0, dateMatch).trim()
-      : remaining.substring(0, 120).trim();
-  registerPrivilege(code, rawDesc, "", "REFPRV_Open.txt");
+for (const line of readPrivilegeLines(masterPrvFile)) {
+  const { code, descTh } = parsePrivilegeLine(line, 120);
+  registerPrivilege(code, descTh, "", "REFPRV_Open.txt");
 }
 
 // ==========================================
@@ -207,16 +175,10 @@ const outputData = {
   },
 };
 
-// Write JSON output
-fs.mkdirSync(path.dirname(resolvedOutputPath), { recursive: true });
-fs.writeFileSync(
-  resolvedOutputPath,
-  JSON.stringify(outputData, null, 2),
-  "utf8",
-);
+writeJson(outputFile, outputData);
 
 console.log(`\n======================================================`);
-console.log(`==> Extracted and saved successfully: ${resolvedOutputPath}`);
+console.log(`==> Extracted and saved successfully: ${outputFile}`);
 console.log(`==> Multilateral Codes (${multiList.length}):`);
 console.log(`    ${outputData.multilateral_codes.join(", ")}`);
 console.log(`==> Bilateral Codes (${biList.length}):`);

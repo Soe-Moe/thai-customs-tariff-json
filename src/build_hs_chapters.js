@@ -1,38 +1,15 @@
 #!/usr/bin/env node
 
-const fs = require("fs");
 const path = require("path");
-const { rawFileExists, readRawText } = require("./lib/raw_file");
+const { parseArgs } = require("./lib/cli");
+const { RAW_FILES, rawFileExists, readRawText } = require("./lib/raw_file");
+const { writeJsonFiles } = require("./lib/output");
 
-// Parse CLI arguments
-const args = process.argv.slice(2);
-let baseDir = "./raw-data";
-let outputDir = "./data/classification";
-
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === "-b" || args[i] === "--base-dir") baseDir = args[++i];
-  else if (args[i] === "-o" || args[i] === "--output-dir")
-    outputDir = args[++i];
-  else if (args[i] === "-h" || args[i] === "--help") {
-    console.log(`
-Usage:
-  node build_hs_chapters.js [-b <raw-data-folder>] [-o <output-folder>]
-
-Default:
-  -b ./raw-data
-  -o ./data/classification
-    `);
-    process.exit(0);
-  }
-}
-
-const resolvedBaseDir = path.resolve(process.cwd(), baseDir);
-const resolvedOutputDir = path.resolve(process.cwd(), outputDir);
-const tariffFile = path.join(resolvedBaseDir, "REFTRC_Open.txt");
-
-if (!fs.existsSync(resolvedOutputDir)) {
-  fs.mkdirSync(resolvedOutputDir, { recursive: true });
-}
+const { baseDir, outputDir } = parseArgs("build_hs_chapters.js", {
+  baseDir: "./src/raw-data",
+  outputDir: "./output/hs_chapters_json",
+});
+const tariffFile = path.join(baseDir, RAW_FILES.tariff);
 
 // ==========================================
 // 1. Official WCO / Thai Customs Sections Master (I - XXI)
@@ -639,28 +616,15 @@ const sectionsGrouped = SECTIONS_MASTER.map((sec) => {
   };
 });
 
-// Write JSON output
-fs.writeFileSync(
-  path.join(resolvedOutputDir, "hs_chapters_list.json"),
-  JSON.stringify(chaptersList, null, 2),
-  "utf8",
-);
-
-fs.writeFileSync(
-  path.join(resolvedOutputDir, "hs_chapters_by_code.json"),
-  JSON.stringify(chaptersMap, null, 2),
-  "utf8",
-);
-
-fs.writeFileSync(
-  path.join(resolvedOutputDir, "hs_sections_grouped.json"),
-  JSON.stringify(sectionsGrouped, null, 2),
-  "utf8",
-);
+writeJsonFiles(outputDir, {
+  "hs_chapters_list.json": chaptersList,
+  "hs_chapters_by_code.json": chaptersMap,
+  "hs_sections_grouped.json": sectionsGrouped,
+});
 
 console.log(`\n======================================================`);
 console.log(
-  `==> HS code chapters & sections generated successfully: ${resolvedOutputDir}`,
+  `==> HS code chapters & sections generated successfully: ${outputDir}`,
 );
 console.log(
   `   1. hs_chapters_list.json     (${chaptersList.length} chapters total - array list)`,
