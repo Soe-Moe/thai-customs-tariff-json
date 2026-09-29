@@ -59,6 +59,7 @@ These scripts produce ready-to-use JSON that answers those questions, without an
 | `build_section12_clause3_rates.js` | `output/section12_clause3_json/` | Section 12, Clause 3 conditional rates |
 | `build_emergency_decree_rates.js` | `output/emergency_decree_json/` | Emergency Decree ceiling rates (privilege code `999`) |
 | `build_electronic_permits.js` | `output/permit_json/` | Import permit requirements and issuing agencies (DOA, FDA, DLD, DOF, DFT, DIW, TISI, …) |
+| `build_hs_chapters.js` | `output/hs_chapters_json/` | HS chapters (01–97) and sections (I–XXI) with Thai / English titles |
 
 ## Quick start
 
@@ -119,6 +120,7 @@ npm run build
 | `npm run build:section12-clause3` | `build_section12_clause3_rates.js` |
 | `npm run build:emergency-decree` | `build_emergency_decree_rates.js` |
 | `npm run build:permits` | `build_electronic_permits.js` |
+| `npm run build:hs-chapters` | `build_hs_chapters.js` |
 
 You can also call a script directly with your own paths:
 
@@ -134,7 +136,7 @@ node src/build_electronic_permits.js -i ./src/raw-data/REFPMG_Open.txt -o ./outp
 | `-b`, `--base-dir` | Folder containing the raw data files | `./src/raw-data` |
 | `-o`, `--output-dir` | Folder to write JSON to (`--output` file path for `extract_fta_privilege_codes.js`) | varies per script |
 | `-i`, `--input` | Input permit file, `.txt` or `.txt.gz` (`build_electronic_permits.js` only) | `./src/raw-data/REFPMG_Open.txt` |
-| `-h`, `--help` | Show usage (`build_asean_atiga_rates.js`, `build_emergency_decree_rates.js`, `extract_fta_privilege_codes.js`) | |
+| `-h`, `--help` | Show usage (`build_asean_atiga_rates.js`, `build_emergency_decree_rates.js`, `extract_fta_privilege_codes.js`, `build_hs_chapters.js`) | |
 
 > **Note:** The generated JSON is large (the full FTA output is over 170 MB), which is over GitHub's 100 MB file limit. `output/` is in `.gitignore`, so generate it locally with `npm run build`.
 
@@ -162,6 +164,27 @@ Most scripts write two files:
 | `*_by_hscode.json` | Object: `{ "<hs_code>": [records…] }` | Fast lookup by HS code |
 
 The FTA script writes `fta_multilateral_full.json`, `fta_bilateral_full.json` and `fta_by_hscode_grouped.json` (with `metadata`, `multilateral` and `bilateral` keys). The permit script writes `electronic_permits_flat.json` and `electronic_permits_by_hscode.json`.
+
+### HS chapters & sections (`hs_chapters_json/`)
+
+| File | Shape | Use it for |
+| --- | --- | --- |
+| `hs_chapters_list.json` | Array of 96 chapters (chapter 77 is reserved in the HS and skipped) | Listing all chapters |
+| `hs_chapters_by_code.json` | Object keyed by 2-digit chapter, e.g. `chapters["08"]` | Looking up a chapter from the first two digits of an HS code |
+| `hs_sections_grouped.json` | Array of sections I–XXI, each with its `chapters` | Tree views and grouped dropdowns |
+
+```json
+{
+  "chapter": "01",
+  "chapter_number": 1,
+  "title_th": "สัตว์มีชีวิต",
+  "title_en": "Live animals",
+  "section_id": "I",
+  "section_order": 1,
+  "section_title_th": "หมวด 1 สัตว์มีชีวิตและผลิตภัณฑ์จากสัตว์",
+  "section_title_en": "Section I Live Animals; Animal Products"
+}
+```
 
 ### Sample rate record (`wto_by_hscode.json`)
 
@@ -288,6 +311,7 @@ thai-customs-tariff-json/
 │   ├── build_section12_clause3_rates.js
 │   ├── build_emergency_decree_rates.js
 │   ├── build_electronic_permits.js
+│   ├── build_hs_chapters.js
 │   └── raw-data/                        # Raw ITD files (gzipped)
 ├── output/                              # Generated JSON (not committed, run `npm run build`)
 ├── .gitignore
