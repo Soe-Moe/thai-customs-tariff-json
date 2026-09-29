@@ -4,7 +4,7 @@
   "description": "Parse Thai Customs (ITD) tariff master files into bilingual Thai/English JSON: WTO, FTA, ATIGA, Section 12 rates and import permits by HS code.",
   "main": "index.js",
   "scripts": {
-    "build": "npm run build:fta-dictionary && npm run build:fta && npm run build:wto && npm run build:asean && npm run build:section12 && npm run build:section12-clause2 && npm run build:section12-clause3 && npm run build:emergency-decree && npm run build:permits && npm run build:hs-chapters",
+    "build": "npm run build:fta-dictionary && npm run build:fta && npm run build:wto && npm run build:asean && npm run build:section12 && npm run build:section12-clause2 && npm run build:section12-clause3 && npm run build:emergency-decree && npm run build:permits && npm run build:hs-chapters && npm run build:hs-catalog",
     "build:fta-dictionary": "node src/extract_fta_privilege_codes.js -b ./src/raw-data -o ./output/fta_privilege_dictionary.json",
     "build:fta": "node src/build_fta_full_data.js -b ./src/raw-data -o ./output/fta_json",
     "build:wto": "node src/build_wto_rates.js -b ./src/raw-data -o ./output/wto_json",
@@ -15,6 +15,7 @@
     "build:emergency-decree": "node src/build_emergency_decree_rates.js -b ./src/raw-data -o ./output/emergency_decree_json",
     "build:permits": "node src/build_electronic_permits.js -i ./src/raw-data/REFPMG_Open.txt -o ./output/permit_json",
     "build:hs-chapters": "node src/build_hs_chapters.js -b ./src/raw-data -o ./output/hs_chapters_json",
+    "build:hs-catalog": "node src/build_hs_catalog.js -b ./src/raw-data -o ./output/hs_catalog_json",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

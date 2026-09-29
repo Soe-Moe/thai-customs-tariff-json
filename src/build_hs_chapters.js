@@ -2,7 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const iconv = require("iconv-lite");
+const { rawFileExists, readRawText } = require("./lib/raw_file");
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
@@ -557,10 +557,10 @@ const CHAPTER_DICTIONARY = {
 // ==========================================
 // 3. If the REFTRC file exists, cross-check chapter titles against the source file
 // ==========================================
-if (fs.existsSync(tariffFile)) {
+if (rawFileExists(tariffFile)) {
   console.log(`==> Verifying chapter titles from REFTRC_Open.txt...`);
   try {
-    const trcText = iconv.decode(fs.readFileSync(tariffFile), "tis-620");
+    const trcText = readRawText(tariffFile);
     const trcLines = trcText.split(/\r?\n/).filter((l) => l.trim().length > 10);
 
     trcLines.forEach((line) => {
