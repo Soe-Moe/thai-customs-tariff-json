@@ -61,6 +61,7 @@ These scripts produce ready-to-use JSON that answers those questions, without an
 | `build_electronic_permits.js`      | `output/permit_json/`                  | Import permit requirements and issuing agencies (DOA, FDA, DLD, DOF, DFT, DIW, TISI, …)                               |
 | `build_hs_chapters.js`             | `output/hs_chapters_json/`             | HS chapters (01–97) and sections (I–XXI) with Thai / English titles                                                   |
 | `build_hs_catalog.js`              | `output/hs_catalog_json/`              | HS catalog of all 8-digit tariff lines with Thai / English descriptions and general duty rates (privilege code `000`) |
+| `build_hs_headings.js`             | `output/hs_headings_json/`             | Heading (4-digit) and subheading (6-digit) titles in Thai / English, fetched from the ITD portal (not in the raw files; needs network, run with `npm run build:hs-headings`) |
 
 ## Quick start
 
