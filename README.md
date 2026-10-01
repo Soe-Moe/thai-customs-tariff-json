@@ -8,7 +8,7 @@
 
 Turn the Thai Customs Department's tariff master files into clean, bilingual (Thai / English) JSON that you can search by HS code.
 
-The original files come as TIS-620 encoded fixed-width text, and one file mixes every privilege code together. The scripts here decode the files, separate the records by duty regime, parse rates, dates and conditions, and write two JSON views for each regime: a flat list, and a map keyed by HS code.
+The original files come as Windows-874 (TIS-620 plus curly quotes and dashes) encoded fixed-width text, and one file mixes every privilege code together. The scripts here decode the files, separate the records by duty regime, parse rates, dates and conditions, and write two JSON views for each regime: a flat list, and a map keyed by HS code.
 
 ## Table of contents
 
@@ -44,7 +44,7 @@ These scripts produce ready-to-use JSON that answers those questions, without an
 - 🔎 Records are keyed by 8-digit HS code, so a lookup is one step
 - 🧾 Rates are parsed into numbers (ad valorem %, specific rate in baht per unit), plus exemption and condition flags
 - 📦 The raw ITD data is included, gzipped: 323 MB of text shrinks to about 6 MB, so there's nothing extra to download
-- 🪶 The only dependency is [`iconv-lite`](https://www.npmjs.com/package/iconv-lite), for TIS-620 decoding
+- 🪶 The only dependency is [`iconv-lite`](https://www.npmjs.com/package/iconv-lite), for Windows-874 / TIS-620 decoding
 
 ## Datasets produced
 
@@ -348,7 +348,7 @@ jq '[.[] | select(.duty_rate.is_exempt)] | length' output/section12_json/section
 ```text
 thai-customs-tariff-json/
 ├── src/                                 # Parser scripts (one per dataset) and raw data
-│   ├── lib/raw_file.js                  # Reads .txt / .txt.gz raw files and decodes TIS-620
+│   ├── lib/raw_file.js                  # Reads .txt / .txt.gz raw files and decodes Windows-874
 │   ├── lib/conditions.js                # Privilege codes the portal marks with ** (has_condition)
 │   ├── check_portal_conditions.js       # Compares lib/conditions.js with the live portal
 │   ├── build_wto_rates.js
@@ -375,7 +375,7 @@ thai-customs-tariff-json/
 | Problem                                                   | Fix                                                                                                                          |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `Error: Required files are missing in <folder>`           | Check that the file names in `src/raw-data/` match exactly, e.g. `REFDRT_Open_20220101.txt.gz` or `REFDRT_Open_20220101.txt` |
-| Thai text shows as `�` or garbled characters              | The raw files must be the original TIS-620 files. Don't re-save them as UTF-8 before compressing or parsing                  |
+| Thai text shows as `�` or garbled characters              | The raw files must be the original Windows-874 / TIS-620 files. Don't re-save them as UTF-8 before compressing or parsing                  |
 | `JavaScript heap out of memory`                           | Give Node more memory: `node --max-old-space-size=8192 src/build_fta_full_data.js`                                           |
 | `Patches folder not found`                                | Only a notice. The FTA scripts still run using `REFPRV_Open.txt` alone                                                       |
 | A newer ITD release has a different date in the file name | Rename it to `REFDRT_Open_20220101.txt` (then gzip it), or update `RAW_FILES.duty` in `src/lib/raw_file.js`                                  |

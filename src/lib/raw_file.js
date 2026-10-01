@@ -22,7 +22,11 @@ function rawFileExists(filePath) {
   return resolveRawFile(filePath) !== null;
 }
 
-// Read a raw data file (.txt or .txt.gz) and decode it from TIS-620
+// Read a raw data file (.txt or .txt.gz) and decode it from Windows-874.
+// The files are TIS-620 plus Windows-874's extra punctuation (0x91-0x96
+// curly quotes and dashes, 0xA0 no-break space), which plain TIS-620
+// decodes as U+FFFD. Quotes and NBSP are folded to ASCII one-for-one, so
+// fixed-width column offsets are unchanged.
 function readRawText(filePath) {
   const resolved = resolveRawFile(filePath);
   if (!resolved) {
@@ -31,7 +35,11 @@ function readRawText(filePath) {
   }
   let buffer = fs.readFileSync(resolved);
   if (resolved.endsWith(".gz")) buffer = zlib.gunzipSync(buffer);
-  return iconv.decode(buffer, "tis-620");
+  return iconv
+    .decode(buffer, "windows-874")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u00A0/g, " ");
 }
 
 // Paths of the given RAW_FILES entries in baseDir; exits if any of them is missing
