@@ -19,6 +19,7 @@ const {
   stripInternalFields,
 } = require("./lib/duty_rates");
 const { writeJsonFiles, groupBy } = require("./lib/output");
+const { PORTAL_CONDITION_CODES } = require("./lib/conditions");
 
 const { baseDir, outputDir, date } = parseArgs("build_fta_full_data.js", {
   baseDir: "./src/raw-data",
@@ -99,10 +100,9 @@ for (const line of readDutyLines(files.duty)) {
   const dutyRate = rateMatch ? parseFloat(rateMatch[1]) : 0.0;
   const dateRange = parseDateRange(line);
 
-  const hasCondition =
-    line.includes("ต้องตรวจสอบ") ||
-    line.includes("ท้ายประกาศ") ||
-    privilegeCode === "ACN";
+  // Per scheme (see lib/conditions.js); flagged FTA codes carry the
+  // country-of-origin note below.
+  const hasCondition = PORTAL_CONDITION_CODES.has(privilegeCode);
 
   const rateText = formatRatePercent(dutyRate);
   const legalRef = extractLegalRef(line, "ม.14", 50);
@@ -116,7 +116,7 @@ for (const line of readDutyLines(files.duty)) {
     duty_rate: {
       percentage: dutyRate,
       is_exempt: dutyRate === 0,
-      ...formatDutyDisplay(dutyRate === 0, hasCondition, rateText, rateText),
+      ...formatDutyDisplay(dutyRate === 0, rateText, rateText),
     },
     legal_notification: {
       th: legalRef || "ม.14",

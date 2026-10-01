@@ -52,12 +52,8 @@ for (const line of readDutyLines(files.duty)) {
   const { adValoremRate, specificRate, unitInfo } = parseDutyRates(line);
   const dateRange = parseDateRange(line);
 
-  // ** Check for conditions (ท้ายประกาศ = annex, โควตา = quota, เงื่อนไข = condition, ต้องตรวจสอบ = must verify)
-  const hasCondition =
-    line.includes("ต้องตรวจสอบ") ||
-    line.includes("ท้ายประกาศ") ||
-    line.includes("โควตา") ||
-    line.includes("เงื่อนไข");
+  // Per scheme (see lib/conditions.js): the portal never marks this regime.
+  const hasCondition = false;
 
   // Legal Reference (Section 14 WTO)
   const legalRefTh = extractLegalRef(line, "ม.14", 30) || "ม.14 WTO(2565)";
@@ -82,7 +78,7 @@ for (const line of readDutyLines(files.duty)) {
       specific_unit: unitInfo,
       is_exempt: isExempt,
       has_condition: hasCondition,
-      ...formatDutyDisplay(isExempt, hasCondition, rateText, `${rateText}%`),
+      ...formatDutyDisplay(isExempt, rateText, `${rateText}%`),
     },
     legal_notification: {
       th: legalRefTh,

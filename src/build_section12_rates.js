@@ -41,11 +41,8 @@ for (const line of readDutyLines(files.duty)) {
   const { adValoremRate, specificRate, unitInfo } = parseDutyRates(line);
   const dateRange = parseDateRange(line);
 
-  // ** Check for conditions
-  const hasCondition =
-    line.includes("ต้องตรวจสอบ") ||
-    line.includes("ท้ายประกาศ") ||
-    line.includes("เงื่อนไข");
+  // Per scheme (see lib/conditions.js): the portal never marks this regime.
+  const hasCondition = false;
 
   const refMatch = line.match(/(ม\.12\s*ฉ\.\d+)/);
   const legalRefTh = refMatch ? `${refMatch[1]} (2565)` : "ม.12 ฉ.01 (2565)";
@@ -70,7 +67,7 @@ for (const line of readDutyLines(files.duty)) {
       specific_unit: unitInfo,
       is_exempt: isExempt,
       has_condition: hasCondition,
-      ...formatDutyDisplay(isExempt, hasCondition, rateText, rateText),
+      ...formatDutyDisplay(isExempt, rateText, rateText),
     },
     legal_notification: { th: legalRefTh, en: "Sec.12 Notif.01 (2022)" },
     effective_date: formatBilingualDate(dateRange.rawStartDate),

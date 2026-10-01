@@ -63,13 +63,9 @@ for (const line of readDutyLines(files.duty)) {
   const { adValoremRate, specificRate, unitInfo } = parseDutyRates(line);
   const dateRange = parseDateRange(line);
 
-  // ** Check for conditions
-  // (the line contains 'ต้องตรวจสอบ' (must verify) or 'ท้ายประกาศ' (annex to notification), or it is an exemption with Free Zone conditions such as special code 220)
-  const hasCondition =
-    line.includes("ต้องตรวจสอบ") ||
-    line.includes("ท้ายประกาศ") ||
-    line.includes("ข้อกำหนด") ||
-    privilegeCode === "220";
+  // Per scheme (see lib/conditions.js): the portal never marks Section 12
+  // codes; their condition is the scheme title.
+  const hasCondition = false;
 
   const rawRef = extractLegalRef(line, "ม.12", 45);
   const legalRefTh = rawRef?.includes("มีเงื่อนไข")
@@ -99,7 +95,7 @@ for (const line of readDutyLines(files.duty)) {
       specific_unit: unitInfo,
       is_exempt: isExempt,
       has_condition: hasCondition,
-      ...formatDutyDisplay(isExempt, hasCondition, rateText, `${rateText}%`),
+      ...formatDutyDisplay(isExempt, rateText, `${rateText}%`),
     },
     legal_notification: {
       th: legalRefTh,

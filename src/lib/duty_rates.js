@@ -91,12 +91,12 @@ function formatRatePercent(rate) {
     : `${rate.toFixed(3).replace(/\.?0+$/, "")}%`;
 }
 
-// Thai / English display text for a rate, prefixed with "** " when a condition applies
-function formatDutyDisplay(isExempt, hasCondition, rateTextTh, rateTextEn) {
-  const prefix = hasCondition ? "** " : "";
+// Thai / English display text for a rate. No "** " prefix: `has_condition`
+// carries that, and the ITD files have no per-row condition marker to copy.
+function formatDutyDisplay(isExempt, rateTextTh, rateTextEn) {
   return {
-    display_th: `${prefix}${isExempt ? "ยกเว้นอากร" : rateTextTh}`,
-    display_en: `${prefix}${isExempt ? "Duty Exempted" : rateTextEn}`,
+    display_th: isExempt ? "ยกเว้นอากร" : rateTextTh,
+    display_en: isExempt ? "Duty Exempted" : rateTextEn,
   };
 }
 

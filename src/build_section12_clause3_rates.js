@@ -64,8 +64,9 @@ for (const line of readDutyLines(files.duty)) {
   const { adValoremRate, specificRate, unitInfo } = parseDutyRates(line);
   const dateRange = parseDateRange(line);
 
-  // ** Clause 3 exemptions always carry a condition, since a specific order/list must be verified
-  const hasCondition = true;
+  // Per scheme (see lib/conditions.js): the portal never marks Section 12
+  // codes; their condition is the scheme title.
+  const hasCondition = false;
 
   const rawRef = extractLegalRef(line, "ม.12", 45);
   const legalRefTh =
@@ -96,7 +97,7 @@ for (const line of readDutyLines(files.duty)) {
       specific_unit: unitInfo,
       is_exempt: isExempt,
       has_condition: hasCondition,
-      ...formatDutyDisplay(isExempt, hasCondition, rateText, `${rateText}%`),
+      ...formatDutyDisplay(isExempt, rateText, `${rateText}%`),
     },
     legal_notification: {
       th: legalRefTh,

@@ -19,6 +19,7 @@ const {
   stripInternalFields,
 } = require("./lib/duty_rates");
 const { writeJsonFiles, groupBy } = require("./lib/output");
+const { PORTAL_CONDITION_CODES } = require("./lib/conditions");
 
 const { baseDir, outputDir, date } = parseArgs("build_asean_atiga_rates.js", {
   baseDir: "./src/raw-data",
@@ -32,7 +33,6 @@ const ASEAN_SCHEMES = {
   ATG: {
     title_th: "ATG : อาเซียน",
     title_en: "ATG : ASEAN (ATIGA)",
-    default_has_condition: true,
     condition_note_th:
       "ต้องตรวจสอบอัตราอากรภายใต้ความตกลงการค้าสินค้าของอาเซียนสำหรับของประเภทหรือชนิดเดียวกันในประเทศผู้ส่งออก ต้องไม่เกินอัตราตามราคาร้อยละยี่สิบ(20%)",
     condition_note_en:
@@ -43,7 +43,6 @@ const ASEAN_SCHEMES = {
       "ASC : รหัสสิทธิพิเศษ ASC สำหรับกรณีที่ผู้นำของเข้าแสดงเอกสารตามข้อ 4 (1) (ก) (ข) (ค) ของประกาศกระทรวงการคลังฯ ฉบับที่ 2",
     title_en:
       "ASC : Special Scheme under Ministry of Finance Notification Clause 4(1)(a)(b)(c) No.2",
-    default_has_condition: false,
     condition_note_th: null,
     condition_note_en: null,
   },
@@ -68,11 +67,8 @@ for (const line of readDutyLines(files.duty)) {
   const { adValoremRate, specificRate, unitInfo } = parseDutyRates(line);
   const dateRange = parseDateRange(line);
 
-  // ** Check for conditions (ATG includes ** by default; also check whether the line contains condition text)
-  const hasCondition =
-    schemeMeta.default_has_condition ||
-    line.includes("ต้องตรวจสอบ") ||
-    line.includes("เงื่อนไข");
+  // Per scheme (see lib/conditions.js).
+  const hasCondition = PORTAL_CONDITION_CODES.has(privilegeCode);
 
   const isExempt = adValoremRate === 0 && specificRate === 0;
   const rateText = formatRate(adValoremRate);
@@ -94,7 +90,7 @@ for (const line of readDutyLines(files.duty)) {
       specific_unit: unitInfo,
       is_exempt: isExempt,
       has_condition: hasCondition,
-      ...formatDutyDisplay(isExempt, hasCondition, rateText, `${rateText}%`),
+      ...formatDutyDisplay(isExempt, rateText, `${rateText}%`),
     },
     condition_note: {
       th: hasCondition ? schemeMeta.condition_note_th : null,

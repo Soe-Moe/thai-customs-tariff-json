@@ -157,6 +157,17 @@ npm run build
 
 Commit only the `.txt.gz` files. Uncompressed `src/raw-data/*.txt` files are in `.gitignore`, because `REFDRT_Open_20220101.txt` alone is 171 MB.
 
+### Checking the `**` condition list against the portal
+
+The raw files have no condition marker, so `has_condition` is set per privilege code from the list in `src/lib/conditions.js` (currently `ATG`, `ACN`, `AK1`), which mirrors the red `**` on [ITD](http://itd.customs.go.th/). Re-check that list after updating the raw data, or whenever Customs adds privilege codes:
+
+```bash
+npm run check:portal                                  # six sample HS codes across chapters
+node src/check_portal_conditions.js -c 08012100,16010010 --delay 1000
+```
+
+It exits `0` when every sampled HS code matches, `1` on a mismatch (edit `src/lib/conditions.js`, then `npm run build`), and `2` when the portal is unreachable or its page layout changed.
+
 ## Output format
 
 Most scripts write two files:
@@ -260,8 +271,8 @@ Some tariff lines have more than one `000` rate, split by product. These items a
 | `duty_rate.specific_rate_baht`        | Specific rate in baht per unit, if any                                                                            |
 | `duty_rate.specific_unit`             | Unit for the specific rate, e.g. Kilogram, Litre                                                                  |
 | `duty_rate.is_exempt`                 | `true` if duty is exempted (0%)                                                                                   |
-| `duty_rate.has_condition`             | `true` if the rate has conditions (quota, annex list, verification). FTA records use `restrictions.has_condition` |
-| `duty_rate.display_th` / `display_en` | Human-readable rate text                                                                                          |
+| `duty_rate.has_condition`             | `true` where itd.customs.go.th shows the red `**`: `ATG`, `ACN` and `AK1`. Set per scheme, since the ITD files carry no per-row condition marker. FTA records use `restrictions.has_condition` |
+| `duty_rate.display_th` / `display_en` | Human-readable rate text, with no `**` prefix (read `has_condition` instead)                                      |
 | `legal_notification`                  | Legal basis, e.g. `Sec.12 Notif.01 (2022)`, `JTEPA (2025)`                                                        |
 | `effective_date` / `expiry_date`      | `{ iso, th, en }`. `iso: null` means no end date                                                                  |
 
@@ -338,6 +349,8 @@ jq '[.[] | select(.duty_rate.is_exempt)] | length' output/section12_json/section
 thai-customs-tariff-json/
 ├── src/                                 # Parser scripts (one per dataset) and raw data
 │   ├── lib/raw_file.js                  # Reads .txt / .txt.gz raw files and decodes TIS-620
+│   ├── lib/conditions.js                # Privilege codes the portal marks with ** (has_condition)
+│   ├── check_portal_conditions.js       # Compares lib/conditions.js with the live portal
 │   ├── build_wto_rates.js
 │   ├── build_asean_atiga_rates.js
 │   ├── build_fta_full_data.js
