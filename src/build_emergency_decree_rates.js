@@ -4,9 +4,9 @@ const { parseArgs } = require("./lib/cli");
 const { requireRawFiles } = require("./lib/raw_file");
 const { formatBilingualDate } = require("./lib/dates");
 const {
-  loadDescriptionMap,
-  getDescription,
-} = require("./lib/tariff_descriptions");
+  parseLineNote,
+  createTariffLineResolver,
+} = require("./lib/tariff_lines");
 const {
   readDutyLines,
   parseDutyKey,
@@ -32,7 +32,7 @@ const files = requireRawFiles(baseDir, ["duty", "tariff"]);
 
 // 1. Goods Descriptions (REFTRC)
 console.log(`==> [1/2] Reading Descriptions (REFTRC)...`);
-const descriptionMap = loadDescriptionMap(files.tariff);
+const tariffLines = createTariffLineResolver(baseDir, files);
 
 // 2. Emergency Decree Duty Rates (REFDRT - Privilege Code 999)
 console.log(
@@ -62,9 +62,11 @@ for (const line of readDutyLines(files.duty)) {
   const isExempt = adValoremRate === 0 && specificRate === 0;
   const rateText = formatRate(adValoremRate);
 
+  const tariffLine = tariffLines.resolve(hsCode, privilegeCode, parseLineNote(line));
+  if (!tariffLine) continue;
   const record = {
     heading: hsCode.substring(0, 4).replace(/(\d{2})(\d{2})/, "$1.$2"),
-    tariff_code: `${hsCode.substring(0, 4)}.${hsCode.substring(4, 6)}.${hsCode.substring(6, 8)}`,
+    tariff_code: tariffLine.tariff_code,
     raw_hs_code: hsCode,
     tariff_seq: tariffSeqStr,
     privilege_code: "999",
@@ -72,7 +74,7 @@ for (const line of readDutyLines(files.duty)) {
       th: "999 : อัตราอากรตามภาค 2 แห่ง พรก. 2530 (อัตราเพดานสูงสุด)",
       en: "999 : Emergency Decree on Customs Tariff B.E. 2530 (Part 2 Ceiling Rates)",
     },
-    description: getDescription(descriptionMap, hsCode),
+    description: tariffLine.description,
     duty_rate: {
       ad_valorem_percentage: adValoremRate,
       specific_rate_baht: specificRate,
@@ -91,11 +93,11 @@ for (const line of readDutyLines(files.duty)) {
     _start_int: dateRange.startInt,
   };
 
-  keepPreferredRecord(emergencyDecreeMap, `${hsCode}_999`, record, tariffSeq);
+  keepPreferredRecord(emergencyDecreeMap, `${tariffLine.tariff_code}_999`, record, tariffSeq);
 }
 
 const records = stripInternalFields([...emergencyDecreeMap.values()]).sort(
-  (a, b) => a.raw_hs_code.localeCompare(b.raw_hs_code),
+  (a, b) => a.tariff_code.localeCompare(b.tariff_code),
 );
 const groupedByHs = groupBy(records, "raw_hs_code");
 
@@ -113,3 +115,4 @@ console.log(
   `   2. emergency_decree_by_hscode.json (${Object.keys(groupedByHs).length} HS Codes)`,
 );
 console.log(`======================================================`);
+tariffLines.logUnresolved();

@@ -62,6 +62,7 @@ These scripts produce ready-to-use JSON that answers those questions, without an
 | `build_hs_chapters.js`             | `output/hs_chapters_json/`             | HS chapters (01–97) and sections (I–XXI) with Thai / English titles                                                   |
 | `build_hs_catalog.js`              | `output/hs_catalog_json/`              | HS catalog of all 8-digit tariff lines with Thai / English descriptions and general duty rates (privilege code `000`) |
 | `build_hs_headings.js`             | `output/hs_headings_json/`             | Heading (4-digit) and subheading (6-digit) titles in Thai / English, fetched from the ITD portal (not in the raw files; needs network, run with `npm run build:hs-headings`) |
+| `build_stat_suffixes.js`           | `src/raw-data/stat_suffixes.json`      | 10-digit statistical suffixes for tariff lines split into parts (e.g. `3906.909901` / `3906.909929`), fetched from the ITD portal (needs network, run with `npm run build:stat-suffixes`; the rate scripts read it) |
 
 ## Quick start
 
@@ -90,6 +91,7 @@ src/raw-data/
 ├── REFTRC_Open.txt.gz            # Tariff codes & goods descriptions
 ├── REFPRV_Open.txt.gz            # Privilege code master
 ├── REFPMG_Open.txt.gz            # Electronic import permits
+├── stat_suffixes.json            # Portal-scraped 10-digit suffixes (npm run build:stat-suffixes)
 └── patches/                      # Extra privilege files, e.g. REFPVC_Open_J1E.txt
 ```
 
@@ -99,6 +101,7 @@ src/raw-data/
 | `REFTRC_Open.txt.gz`          | All rate scripts                                  |
 | `REFPRV_Open.txt.gz`          | FTA, ASEAN, Section 12 Clause 2/3, FTA dictionary |
 | `REFPMG_Open.txt.gz`          | Electronic permits                                |
+| `stat_suffixes.json`          | All rate scripts, HS catalog                      |
 | `patches/`                    | FTA, FTA dictionary                               |
 
 Each script looks for `<name>.txt` first and falls back to `<name>.txt.gz`. So you can also drop in uncompressed `.txt` files, e.g. a fresh download from ITD (see [Updating the raw data](#updating-the-raw-data)).
@@ -124,6 +127,8 @@ npm run build
 | `npm run build:permits`           | `build_electronic_permits.js`      |
 | `npm run build:hs-chapters`       | `build_hs_chapters.js`             |
 | `npm run build:hs-catalog`        | `build_hs_catalog.js`              |
+| `npm run build:hs-headings`       | `build_hs_headings.js` (network)   |
+| `npm run build:stat-suffixes`     | `build_stat_suffixes.js` (network) |
 
 You can also call a script directly with your own paths:
 
@@ -212,7 +217,19 @@ Each item has `hs_code` (e.g. `0305.71.10`), `raw_code`, `chapter`, `heading`, `
 
 The raw files have no dash indents, so `indent` (0–4) is worked out from the HS code, and the descriptions are prefixed with that many dashes, as in the printed tariff schedule (e.g. `0801.21.00` → `- - ทั้งเปลือก` / `- - In shell`). Levels deeper than the code shows can't be detected.
 
-Some tariff lines have more than one `000` rate, split by product. These items also have a `duty_rate_variants` array, and each variant has a `note_th` naming the products it covers (e.g. `เฉพาะรากชะเอม`, "licorice root only"). The top-level rate is the last variant, usually the catch-all `อื่นๆ` ("other") rate.
+Some tariff lines have more than one `000` rate, split by product. These items also have a `duty_rate_variants` array, and each variant has its 10-digit `tariff_code` (see [Split tariff lines](#split-tariff-lines)) and a `note_th` naming the products it covers (e.g. `เฉพาะรากชะเอม`, "licorice root only"). The top-level rate is the last variant, usually the catch-all `อื่นๆ` ("other") rate.
+
+### Split tariff lines
+
+REFDRT can split one 8-digit tariff line into parts under a privilege code, each with its own rate, and names each part in a note at the end of the line. The ITD portal gives every part its own 10-digit code, but the raw files carry no suffix for them. `npm run build:stat-suffixes` fetches the suffixes from the portal into `src/raw-data/stat_suffixes.json`, and the rate scripts then emit one record per part:
+
+| `tariff_code` | Privilege | `description.th`        | Rate       |
+| ------------- | --------- | ----------------------- | ---------- |
+| `3906.909901` | `000`     | `- - - เฉพาะโคโพลิเมอร์` | ยกเว้นอากร |
+| `3906.909929` | `000`     | `- - - อื่น ๆ`           | 5%         |
+| `3906.909900` | `220`     | `- - - อื่น ๆ`           | ยกเว้นอากร |
+
+A part's suffix depends on the privilege code (`8414.809002` under `000` is `8414.809071` under `WTO`), so `stat_suffixes.json` records which privilege codes each part appears under. A privilege code that lists the line whole keeps the `00` suffix. Where the portal shows a privilege split into parts, a REFDRT line that matches none of them is dropped, since the portal lists only the parts. A note the portal shows no part for at all (an expired part, a date range, a reworded description) counts as the whole line and keeps `00`. The scripts print how many lines fall into each case.
 
 ### Sample rate record (`wto_by_hscode.json`)
 
@@ -230,8 +247,8 @@ Some tariff lines have more than one `000` rate, split by product. These items a
         "en": "WTO : World Trade Organization"
       },
       "description": {
-        "th": "- - รายการตามพิกัด",
-        "en": "- - Tariff Item Description"
+        "th": "- - ใช้สำหรับการเพาะปลูก",
+        "en": "- - Seed"
       },
       "duty_rate": {
         "ad_valorem_percentage": 27,
@@ -262,12 +279,12 @@ Some tariff lines have more than one `000` rate, split by product. These items a
 | Field                                 | Description                                                                                                       |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `heading`                             | 4-digit HS heading, e.g. `10.01`                                                                                  |
-| `tariff_code`                         | Tariff code as printed in the Thai tariff schedule                                                                |
-| `raw_hs_code` / `hs_code`             | 8-digit HS code with no dots, the lookup key                                                                      |
+| `tariff_code`                         | 10-digit tariff code as the ITD portal prints it; the last two digits are `00` unless the line is split (see [Split tariff lines](#split-tariff-lines)) |
+| `raw_hs_code` / `hs_code`             | 8-digit HS code with no dots, the lookup key; a split line has one record per part under the same key             |
 | `tariff_seq`                          | Sequence number of the tariff version the record comes from                                                       |
 | `privilege_code`                      | Duty regime code, e.g. `WTO`, `ATG`, `J1E`, `999` (see [Glossary](#glossary))                                     |
 | `agreement_name`                      | Name of the agreement or privilege (`th` / `en`)                                                                  |
-| `description`                         | Goods description (`th` / `en`)                                                                                   |
+| `description`                         | Goods description (`th` / `en`) of the tariff line, or of the part for a split line                               |
 | `duty_rate.ad_valorem_percentage`     | Ad valorem rate in % (FTA records use `duty_rate.percentage`)                                                     |
 | `duty_rate.specific_rate_baht`        | Specific rate in baht per unit, if any                                                                            |
 | `duty_rate.specific_unit`             | Unit for the specific rate, e.g. Kilogram, Litre                                                                  |
@@ -351,6 +368,8 @@ thai-customs-tariff-json/
 ├── src/                                 # Parser scripts (one per dataset) and raw data
 │   ├── lib/raw_file.js                  # Reads .txt / .txt.gz raw files and decodes Windows-874
 │   ├── lib/conditions.js                # Privilege codes the portal marks with ** (has_condition)
+│   ├── lib/tariff_lines.js              # Descriptions and 10-digit codes for each REFDRT line
+│   ├── build_stat_suffixes.js           # Fetches split-line suffixes from the portal
 │   ├── check_portal_conditions.js       # Compares lib/conditions.js with the live portal
 │   ├── build_wto_rates.js
 │   ├── build_asean_atiga_rates.js

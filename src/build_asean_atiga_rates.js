@@ -4,9 +4,9 @@ const { parseArgs } = require("./lib/cli");
 const { requireRawFiles } = require("./lib/raw_file");
 const { formatBilingualDate } = require("./lib/dates");
 const {
-  loadDescriptionMap,
-  getDescription,
-} = require("./lib/tariff_descriptions");
+  parseLineNote,
+  createTariffLineResolver,
+} = require("./lib/tariff_lines");
 const {
   readDutyLines,
   parseDutyKey,
@@ -50,7 +50,7 @@ const ASEAN_SCHEMES = {
 
 // 1. Goods Descriptions (REFTRC)
 console.log(`==> [1/2] Reading Descriptions (REFTRC)...`);
-const descriptionMap = loadDescriptionMap(files.tariff);
+const tariffLines = createTariffLineResolver(baseDir, files);
 
 // 2. ASEAN Duty Rates (REFDRT - ATG / ASC)
 console.log(`==> [2/2] Filtering ASEAN (ATG / ASC) records from REFDRT...`);
@@ -73,9 +73,11 @@ for (const line of readDutyLines(files.duty)) {
   const isExempt = adValoremRate === 0 && specificRate === 0;
   const rateText = formatRate(adValoremRate);
 
+  const tariffLine = tariffLines.resolve(hsCode, privilegeCode, parseLineNote(line));
+  if (!tariffLine) continue;
   const record = {
     heading: hsCode.substring(0, 4).replace(/(\d{2})(\d{2})/, "$1.$2"),
-    tariff_code: `${hsCode.substring(0, 4)}.${hsCode.substring(4, 8)}00`,
+    tariff_code: tariffLine.tariff_code,
     raw_hs_code: hsCode,
     tariff_seq: tariffSeqStr,
     privilege_code: privilegeCode,
@@ -83,7 +85,7 @@ for (const line of readDutyLines(files.duty)) {
       th: schemeMeta.title_th,
       en: schemeMeta.title_en,
     },
-    description: getDescription(descriptionMap, hsCode),
+    description: tariffLine.description,
     duty_rate: {
       ad_valorem_percentage: adValoremRate,
       specific_rate_baht: specificRate,
@@ -108,7 +110,7 @@ for (const line of readDutyLines(files.duty)) {
 
   keepPreferredRecord(
     aseanMap,
-    `${hsCode}_${privilegeCode}`,
+    `${tariffLine.tariff_code}_${privilegeCode}`,
     record,
     tariffSeq,
   );
@@ -117,7 +119,7 @@ for (const line of readDutyLines(files.duty)) {
 // Clean internal fields and sort
 const aseanRecords = stripInternalFields([...aseanMap.values()]).sort(
   (a, b) =>
-    a.raw_hs_code.localeCompare(b.raw_hs_code) ||
+    a.tariff_code.localeCompare(b.tariff_code) ||
     a.privilege_code.localeCompare(b.privilege_code),
 );
 const aseanByHs = groupBy(aseanRecords, "raw_hs_code");
@@ -134,3 +136,4 @@ console.log(
   `   2. asean_atiga_by_hscode.json (${Object.keys(aseanByHs).length} HS Codes)`,
 );
 console.log(`======================================================`);
+tariffLines.logUnresolved();

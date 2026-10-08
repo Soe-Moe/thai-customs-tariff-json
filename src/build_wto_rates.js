@@ -4,9 +4,9 @@ const { parseArgs } = require("./lib/cli");
 const { requireRawFiles } = require("./lib/raw_file");
 const { formatBilingualDate } = require("./lib/dates");
 const {
-  loadDescriptionMap,
-  getDescription,
-} = require("./lib/tariff_descriptions");
+  parseLineNote,
+  createTariffLineResolver,
+} = require("./lib/tariff_lines");
 const {
   readDutyLines,
   parseDutyKey,
@@ -30,7 +30,7 @@ const files = requireRawFiles(baseDir, ["duty", "tariff"]);
 
 // 1. Goods Descriptions (REFTRC)
 console.log(`==> [1/2] Reading Descriptions (REFTRC)...`);
-const descriptionMap = loadDescriptionMap(files.tariff);
+const tariffLines = createTariffLineResolver(baseDir, files);
 
 // 2. WTO Duty Rates (REFDRT)
 console.log(`==> [2/2] Filtering WTO records from REFDRT...`);
@@ -61,9 +61,11 @@ for (const line of readDutyLines(files.duty)) {
   const isExempt = adValoremRate === 0 && specificRate === 0;
   const rateText = formatRate(adValoremRate);
 
+  const tariffLine = tariffLines.resolve(hsCode, privilegeCode, parseLineNote(line));
+  if (!tariffLine) continue;
   const record = {
     heading: hsCode.substring(0, 4).replace(/(\d{2})(\d{2})/, "$1.$2"),
-    tariff_code: `${hsCode.substring(0, 4)}.${hsCode.substring(4, 8)}00`,
+    tariff_code: tariffLine.tariff_code,
     raw_hs_code: hsCode,
     tariff_seq: tariffSeqStr,
     privilege_code: privilegeCode,
@@ -71,7 +73,7 @@ for (const line of readDutyLines(files.duty)) {
       th: "WTO : องค์การการค้าโลก",
       en: "WTO : World Trade Organization",
     },
-    description: getDescription(descriptionMap, hsCode),
+    description: tariffLine.description,
     duty_rate: {
       ad_valorem_percentage: adValoremRate,
       specific_rate_baht: specificRate,
@@ -90,11 +92,11 @@ for (const line of readDutyLines(files.duty)) {
     _start_int: dateRange.startInt,
   };
 
-  keepPreferredRecord(wtoMap, `${hsCode}_${privilegeCode}`, record, tariffSeq);
+  keepPreferredRecord(wtoMap, `${tariffLine.tariff_code}_${privilegeCode}`, record, tariffSeq);
 }
 
 const wtoRecords = stripInternalFields([...wtoMap.values()]).sort((a, b) =>
-  a.raw_hs_code.localeCompare(b.raw_hs_code),
+  a.tariff_code.localeCompare(b.tariff_code),
 );
 const wtoByHs = groupBy(wtoRecords, "raw_hs_code");
 
@@ -110,3 +112,4 @@ console.log(
   `   2. wto_by_hscode.json (${Object.keys(wtoByHs).length} HS Codes)`,
 );
 console.log(`======================================================`);
+tariffLines.logUnresolved();

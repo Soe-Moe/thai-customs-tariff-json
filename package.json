@@ -17,6 +17,7 @@
     "build:hs-chapters": "node src/build_hs_chapters.js -b ./src/raw-data -o ./output/hs_chapters_json",
     "build:hs-catalog": "node src/build_hs_catalog.js -b ./src/raw-data -o ./output/hs_catalog_json",
     "build:hs-headings": "node src/build_hs_headings.js -o ./output/hs_headings_json",
+    "build:stat-suffixes": "node src/build_stat_suffixes.js -b ./src/raw-data",
     "check:portal": "node src/check_portal_conditions.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

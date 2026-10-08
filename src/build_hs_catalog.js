@@ -11,6 +11,12 @@ const {
 const { formatBilingualDate } = require("./lib/dates");
 const { UNIT_MAP, readDutyLines } = require("./lib/duty_rates");
 const { writeJsonFiles, groupBy } = require("./lib/output");
+const {
+  getIndent,
+  withIndent,
+  parseLineNote,
+  createTariffLineResolver,
+} = require("./lib/tariff_lines");
 
 const { baseDir, outputDir } = parseArgs("build_hs_catalog.js", {
   baseDir: "./src/raw-data",
@@ -18,20 +24,6 @@ const { baseDir, outputDir } = parseArgs("build_hs_catalog.js", {
 });
 const { tariff: tariffFile } = requireRawFiles(baseDir, ["tariff"]);
 const dutyFile = path.join(baseDir, RAW_FILES.duty);
-
-// REFTRC has no dash indents, so derive them from the HS code structure:
-//   Subheading (digits 5-6): "00" = not subdivided (0), "x0" = one dash (1),
-//     "xy" = two dashes (2), under an unnumbered one-dash group (e.g. "- Brazil nuts:")
-//   National (digits 7-8): "00" = same line as the subheading, "x0" = +1,
-//     "xy" = +2, under an unnumbered group (e.g. "- - - Other:")
-function getIndent(rawHs8) {
-  const levelOf = (pair) => (pair === "00" ? 0 : pair[1] === "0" ? 1 : 2);
-  return levelOf(rawHs8.substring(4, 6)) + levelOf(rawHs8.substring(6, 8));
-}
-
-function withIndent(desc, indent) {
-  return indent > 0 ? `${"- ".repeat(indent)}${desc}` : desc;
-}
 
 // ==========================================
 // 1. Read General Duty Rates (REFDRT - Privilege 000)
@@ -43,6 +35,7 @@ function withIndent(desc, indent) {
 //   [57,60) Specific rate unit      After the last date pair: product note
 const dutyMap = new Map(); // HS code -> list of 000 rate variants
 if (rawFileExists(dutyFile)) {
+  const tariffLines = createTariffLineResolver(baseDir, { tariff: tariffFile, duty: dutyFile });
   console.log(`==> [1/2] Reading MFN/General Duty Rates (REFDRT)...`);
   for (const line of readDutyLines(dutyFile)) {
     if (line.substring(17, 20) !== "000") continue;
@@ -54,14 +47,14 @@ if (rawFileExists(dutyFile)) {
     const unit = unitCode ? UNIT_MAP[unitCode] : null;
 
     // Text after the last date pair narrows the rate to part of the tariff line (e.g. "เฉพาะรากชะเอม")
-    const datePairs = [...line.matchAll(/(20\d{6})(20\d{6}|99999999)/g)];
-    const lastPair = datePairs[datePairs.length - 1];
-    const noteTh = lastPair
-      ? line.substring(lastPair.index + lastPair[0].length).trim() || null
-      : null;
+    const noteTh = parseLineNote(line) || null;
+
+    const tariffLine = tariffLines.resolve(hsCode, "000", noteTh);
+    if (!tariffLine) continue;
 
     if (!dutyMap.has(hsCode)) dutyMap.set(hsCode, []);
     dutyMap.get(hsCode).push({
+      tariff_code: tariffLine.tariff_code,
       tariff_seq: line.substring(12, 17),
       duty_exempt: adValoremRate === 0 && specificRate === 0,
       ad_valorem_percent:

@@ -4,9 +4,9 @@ const { parseArgs } = require("./lib/cli");
 const { requireRawFiles } = require("./lib/raw_file");
 const { formatBilingualDate } = require("./lib/dates");
 const {
-  loadDescriptionMap,
-  getDescription,
-} = require("./lib/tariff_descriptions");
+  parseLineNote,
+  createTariffLineResolver,
+} = require("./lib/tariff_lines");
 const {
   readDutyLines,
   parseDutyKey,
@@ -30,7 +30,7 @@ const files = requireRawFiles(baseDir, ["duty", "tariff"]);
 
 // 1. Goods Descriptions (REFTRC)
 console.log(`==> [1/3] Reading Descriptions...`);
-const descriptionMap = loadDescriptionMap(files.tariff);
+const tariffLines = createTariffLineResolver(baseDir, files);
 
 // 2. Read Duty Rates (REFDRT)
 console.log(`==> [2/3] Reading Duty Rates active on ${date}...`);
@@ -107,12 +107,15 @@ for (const line of readDutyLines(files.duty)) {
   const rateText = formatRatePercent(dutyRate);
   const legalRef = extractLegalRef(line, "ม.14", 50);
 
+  const tariffLine = tariffLines.resolve(hsCode, privilegeCode, parseLineNote(line));
+  if (!tariffLine) continue;
   const record = {
     hs_code: hsCode,
+    tariff_code: tariffLine.tariff_code,
     tariff_seq: tariffSeqStr,
     privilege_code: privilegeCode,
     agreement_name: { th: privilegeCode, en: privilegeCode },
-    description: getDescription(descriptionMap, hsCode),
+    description: tariffLine.description,
     duty_rate: {
       percentage: dutyRate,
       is_exempt: dutyRate === 0,
@@ -137,7 +140,7 @@ for (const line of readDutyLines(files.duty)) {
     _start_int: dateRange.startInt,
   };
 
-  const groupKey = `${hsCode}_${privilegeCode}`;
+  const groupKey = `${tariffLine.tariff_code}_${privilegeCode}`;
   if (isMulti) keepPreferredRecord(multilateralMap, groupKey, record, tariffSeq);
   if (isBi) keepPreferredRecord(bilateralMap, groupKey, record, tariffSeq);
 }
@@ -186,6 +189,7 @@ for (const [key, existingRecord] of bilateralMap.entries()) {
     if (meta.base === baseCode) {
       newJtepaRecords.push({
         hs_code: existingRecord.hs_code,
+        tariff_code: existingRecord.tariff_code,
         tariff_seq: existingRecord.tariff_seq,
         privilege_code: newCode,
         agreement_name: {
@@ -218,11 +222,11 @@ for (const [key, existingRecord] of bilateralMap.entries()) {
 
 // Merge into the Bilateral Map
 newJtepaRecords.forEach((rec) => {
-  bilateralMap.set(`${rec.hs_code}_${rec.privilege_code}`, rec);
+  bilateralMap.set(`${rec.tariff_code}_${rec.privilege_code}`, rec);
 });
 
 const byCodeThenPrivilege = (a, b) =>
-  a.hs_code.localeCompare(b.hs_code) ||
+  a.tariff_code.localeCompare(b.tariff_code) ||
   a.privilege_code.localeCompare(b.privilege_code);
 const multiRecords = stripInternalFields([...multilateralMap.values()]).sort(
   byCodeThenPrivilege,
@@ -250,3 +254,4 @@ console.log(`   - Multilateral Records : ${multiRecords.length}`);
 console.log(
   `   - Bilateral Records    : ${biRecords.length} (includes J1E, J1P, TAU)`,
 );
+tariffLines.logUnresolved();

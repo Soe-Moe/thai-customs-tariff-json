@@ -5,9 +5,9 @@ const { requireRawFiles } = require("./lib/raw_file");
 const { formatBilingualDate } = require("./lib/dates");
 const { loadPrivilegeTitles } = require("./lib/privileges");
 const {
-  loadDescriptionMap,
-  getDescription,
-} = require("./lib/tariff_descriptions");
+  parseLineNote,
+  createTariffLineResolver,
+} = require("./lib/tariff_lines");
 const {
   readDutyLines,
   parseDutyKey,
@@ -40,7 +40,7 @@ const clause3Titles = loadPrivilegeTitles(files.privilege, /^3\d{2}$/, {
 });
 
 // REFTRC
-const descriptionMap = loadDescriptionMap(files.tariff);
+const tariffLines = createTariffLineResolver(baseDir, files);
 
 // REFDRT
 const clause3Map = new Map();
@@ -80,9 +80,11 @@ for (const line of readDutyLines(files.duty)) {
   const isExempt = adValoremRate === 0 && specificRate === 0;
   const rateText = formatRate(adValoremRate);
 
+  const tariffLine = tariffLines.resolve(hsCode, privilegeCode, parseLineNote(line));
+  if (!tariffLine) continue;
   const record = {
     heading: hsCode.substring(0, 4).replace(/(\d{2})(\d{2})/, "$1.$2"),
-    tariff_code: `${hsCode.substring(0, 4)}.${hsCode.substring(4, 8)}00`,
+    tariff_code: tariffLine.tariff_code,
     raw_hs_code: hsCode,
     tariff_seq: tariffSeqStr,
     privilege_code: privilegeCode,
@@ -90,7 +92,7 @@ for (const line of readDutyLines(files.duty)) {
       th: `${privilegeCode} : ${schemeTitleTh}`,
       en: `Section 12 Clause 3 (Code ${privilegeCode})`,
     },
-    description: getDescription(descriptionMap, hsCode),
+    description: tariffLine.description,
     duty_rate: {
       ad_valorem_percentage: adValoremRate,
       specific_rate_baht: specificRate,
@@ -111,7 +113,7 @@ for (const line of readDutyLines(files.duty)) {
 
   keepPreferredRecord(
     clause3Map,
-    `${hsCode}_${privilegeCode}`,
+    `${tariffLine.tariff_code}_${privilegeCode}`,
     record,
     tariffSeq,
   );
@@ -119,7 +121,7 @@ for (const line of readDutyLines(files.duty)) {
 
 const records = stripInternalFields([...clause3Map.values()]).sort(
   (a, b) =>
-    a.raw_hs_code.localeCompare(b.raw_hs_code) ||
+    a.tariff_code.localeCompare(b.tariff_code) ||
     a.privilege_code.localeCompare(b.privilege_code),
 );
 
@@ -128,3 +130,4 @@ writeJsonFiles(outputDir, {
   "section12_clause3_by_hscode.json": groupBy(records, "raw_hs_code"),
 });
 console.log(`==> Update complete: ${outputDir} (${records.length} records)`);
+tariffLines.logUnresolved();
