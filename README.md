@@ -33,7 +33,7 @@ If you're building a tariff lookup, a landed-cost calculator, a customs declarat
 - What's the WTO (MFN) duty rate for HS code `10011100`?
 - Is there an FTA rate (ATIGA, RCEP, JTEPA, …) for this product, and what are its conditions?
 - Is this product exempt from duty under Section 12 or an Emergency Decree?
-- Does this product need an electronic import permit, and which agency issues it?
+- Does this product need an electronic permit (import, export, crossing or both), and which agency issues it?
 
 These scripts produce ready-to-use JSON that answers those questions, without anyone having to parse the raw customs files by hand.
 
@@ -58,7 +58,7 @@ These scripts produce ready-to-use JSON that answers those questions, without an
 | `build_section12_clause2_rates.js` | `output/section12_clause2_json/`       | Section 12, Clause 2 conditional rates (e.g. Free Zone)                                                               |
 | `build_section12_clause3_rates.js` | `output/section12_clause3_json/`       | Section 12, Clause 3 conditional rates                                                                                |
 | `build_emergency_decree_rates.js`  | `output/emergency_decree_json/`        | Emergency Decree ceiling rates (privilege code `999`)                                                                 |
-| `build_electronic_permits.js`      | `output/permit_json/`                  | Import permit requirements and issuing agencies (DOA, FDA, DLD, DOF, DFT, DIW, TISI, …)                               |
+| `build_electronic_permits.js`      | `output/permit_json/`                  | Permit requirements by case (import, export, crossing, import and export) and issuing agency (all 23 in the file)                            |
 | `build_hs_chapters.js`             | `output/hs_chapters_json/`             | HS chapters (01–97) and sections (I–XXI) with Thai / English titles                                                   |
 | `build_hs_catalog.js`              | `output/hs_catalog_json/`              | HS catalog of all 8-digit tariff lines with Thai / English descriptions and general duty rates (privilege code `000`) |
 | `build_hs_headings.js`             | `output/hs_headings_json/`             | Heading (4-digit) and subheading (6-digit) titles in Thai / English, fetched from the ITD portal (not in the raw files; needs network, run with `npm run build:hs-headings`) |

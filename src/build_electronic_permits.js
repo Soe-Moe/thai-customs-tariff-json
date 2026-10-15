@@ -10,59 +10,44 @@ const { input, outputDir } = parseArgs("build_electronic_permits.js", {
   outputDir: "./output/permit_json",
 });
 
-// Official NSW Tax ID map of Thai government agencies
+// Issuing agency by the 13-digit tax ID in the REFPMG line. Names are the ones
+// the ITD portal shows (permit page, Thai and English); every ID in the file
+// was checked against the portal.
 const AGENCY_TAX_MAP = {
-  // Department of Agriculture (DOA)
+  "0994000011679": { th: "กรมการอุตสาหกรรมทหาร", en: "Defence Industry Department" },
+  "0994000036213": { th: "กรมอุตสาหกรรมพื้นฐานและการเหมืองแร่", en: "Department of Primary Industries and Mines" },
+  "0994000036337": { th: "กรมธุรกิจพลังงาน", en: "Department of Energy Business" },
+  "0994000037015": { th: "สำนักงานมาตรฐานสินค้าเกษตรและอาหารแห่งชาติ", en: "National Bureau of Agricultural Commodity Food Standards" },
+  "0994000041969": { th: "กรมอุทยานแห่งชาติ สัตว์ป่าและพันธุ์พืช", en: "Department of National Parks, Wildlife and Plant Conservation" },
+  "0994000049447": { th: "สำนักงานคณะกรรมการกิจการกระจายเสียง กิจการโทรทัศน์ และกิจการโทรคมนาคมแห่งชาติ", en: "Office of The National Broadcasting and Telecommunications Commission" },
+  "0994000132115": { th: "สำนักงานคณะกรรมการอ้อยและน้ำตาลทราย", en: "The Office of the Cane and Sugar Board" },
   "0994000158921": { th: "กรมวิชาการเกษตร", en: "Department of Agriculture" },
-  "0994000164861": { th: "กรมวิชาการเกษตร", en: "Department of Agriculture" },
+  "0994000159251": { th: "กรมปศุสัตว์", en: "Department of Livestock Development" },
+  "0994000159544": { th: "สำนักงานปรมาณูเพื่อสันติ", en: "Office of Atoms for Peace" },
+  "0994000159561": { th: "กรมการค้าต่างประเทศ", en: "Department of Foreign Trade" },
+  "0994000159897": { th: "กรมป่าไม้", en: "Royal Forest Department" },
+  "0994000160259": { th: "กรมประมง", en: "Department of Fisheries" },
+  "0994000160461": { th: "กรมสรรพสามิต", en: "Excise Department" },
+  "0994000160682": { th: "กรมวิทยาศาสตร์การแพทย์", en: "Department of Medical Science" },
+  "0994000160887": { th: "กรมทรัพยากรธรณี", en: "Department of Mineral Resources" },
+  // The portal's English page prints "Department of Foreign Trade" for this
+  // ID, but its Thai name is the Department of Internal Trade.
+  "0994000161450": { th: "กรมการค้าภายใน", en: "Department of Internal Trade" },
+  "0994000162626": { th: "กรมการปกครอง", en: "Department of Provincial Administration" },
+  "0994000162847": { th: "กรมศิลปากร", en: "Fine Arts Department" },
+  "0994000165161": { th: "สำนักงานมาตรฐานผลิตภัณฑ์อุตสาหกรรม", en: "Thai Industrial Standards Institute (TISI)" },
+  "0994000165676": { th: "สำนักงานคณะกรรมการอาหารและยา", en: "Food and Drug Administration (FDA)" },
+  "0994000528116": { th: "กรมโรงงานอุตสาหกรรม", en: "Department of Industrial Works" },
+  "0994001057192": { th: "การยางแห่งประเทศไทย", en: "Rubber Authority of Thailand" },
+};
 
-  // Food and Drug Administration (FDA)
-  "0994000165676": {
-    th: "สำนักงานคณะกรรมการอาหารและยา",
-    en: "Food and Drug Administration (FDA)",
-  },
-  "0994000159493": {
-    th: "สำนักงานคณะกรรมการอาหารและยา",
-    en: "Food and Drug Administration (FDA)",
-  },
-
-  // Department of Livestock Development (DLD)
-  "0994000159507": {
-    th: "กรมปศุสัตว์",
-    en: "Department of Livestock Development",
-  },
-  "0994000164853": {
-    th: "กรมปศุสัตว์",
-    en: "Department of Livestock Development",
-  },
-
-  // Department of Fisheries (DOF)
-  "0994000159515": { th: "กรมประมง", en: "Department of Fisheries" },
-  "0994000164845": { th: "กรมประมง", en: "Department of Fisheries" },
-
-  // Department of Foreign Trade (DFT)
-  "0994000164888": {
-    th: "กรมการค้าต่างประเทศ",
-    en: "Department of Foreign Trade",
-  },
-
-  // Department of Industrial Works (DIW)
-  "0994000165035": {
-    th: "กรมโรงงานอุตสาหกรรม",
-    en: "Department of Industrial Works",
-  },
-
-  // Thai Industrial Standards Institute (TISI)
-  "0994000164837": {
-    th: "สำนักงานมาตรฐานผลิตภัณฑ์อุตสาหกรรม",
-    en: "Thai Industrial Standards Institute (TISI)",
-  },
-
-  // Customs Department
-  "0994000011679": {
-    th: "กรมศุลกากร / หน่วยงานควบคุมร่วม",
-    en: "The Customs Department / Joint Agency",
-  },
+// Digit 16 of a REFPMG line (right after the 3-digit stat code) is the
+// regulation case. Matches the portal's "ของต้องกำกัด กรณี" column.
+const REGULATION_CASES = {
+  0: { key: "IMPORT", th: "นำเข้า", en: "Import" },
+  1: { key: "EXPORT", th: "ส่งออก", en: "Export" },
+  2: { key: "CROSSING", th: "ผ่านแดน", en: "Crossing" },
+  3: { key: "IMPORT_EXPORT", th: "นำเข้าและส่งออก", en: "Import and export" },
 };
 
 // Unlike lib/dates, REFPMG shows an open-ended date as 99/99/9999
@@ -93,6 +78,8 @@ const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 30);
 console.log(`==> Total lines read: ${lines.length}`);
 
 const flatPermitsList = [];
+const unknownAgencies = new Map();
+const skipped = [];
 
 for (const line of lines) {
 
@@ -103,6 +90,13 @@ for (const line of lines) {
   // Stat Code: Byte 12 to 15 (3 digits)
   const statCode = line.substring(12, 15).trim() || "000";
 
+  // Regulation case: Byte 15 (1 digit)
+  const caseInfo = REGULATION_CASES[line.charAt(15)];
+  if (!caseInfo) {
+    skipped.push(`${rawHs}/${statCode}: unknown case digit "${line.charAt(15)}"`);
+    continue;
+  }
+
   // Agency Tax ID: find the 13-digit ID starting with 0994 near the beginning of the line
   const taxMatch = line.match(/\b(0994\d{9})\b/);
   const agencyTaxId = taxMatch ? taxMatch[1] : "";
@@ -112,49 +106,19 @@ for (const line of lines) {
   const conditionTh = isRequired ? "ต้องมีใบอนุญาต" : "ไม่ต้องมีใบอนุญาต";
   const conditionEn = isRequired ? "Permit Required" : "No Permit Required";
 
-  // Find the 16-digit date pair (Start Date + End Date at the end of the line)
-  // Format: YYYYMMDDYYYYMMDD (e.g. 2015040199999999 or 2015090199999999)
-  const allDatePairs = [
-    ...line.matchAll(/(20\d{6}|19\d{6})(20\d{6}|99999999)/g),
-  ];
-  let rawStartDate = "20150101";
-  let rawEndDate = "99999999";
-
-  if (allDatePairs.length > 0) {
-    const lastPair = allDatePairs[allDatePairs.length - 1];
-    rawStartDate = lastPair[1];
-    rawEndDate = lastPair[2];
+  // The line ends with three YYYYMMDD dates: announcement date, start date,
+  // end date (99999999 = open-ended).
+  const dateTail = line.trimEnd().match(/(\d{8})(\d{8})(\d{8})$/);
+  if (!dateTail) {
+    skipped.push(`${rawHs}/${statCode}: no trailing date triple`);
+    continue;
   }
+  const [, , rawStartDate, rawEndDate] = dateTail;
 
-  // Agency Name Mapping
   let agencyInfo = AGENCY_TAX_MAP[agencyTaxId];
   if (!agencyInfo) {
-    if (line.includes("เกษตร"))
-      agencyInfo = { th: "กรมวิชาการเกษตร", en: "Department of Agriculture" };
-    else if (line.includes("อาหารและยา") || line.includes("อย."))
-      agencyInfo = {
-        th: "สำนักงานคณะกรรมการอาหารและยา",
-        en: "Food and Drug Administration (FDA)",
-      };
-    else if (line.includes("ปศุสัตว์"))
-      agencyInfo = {
-        th: "กรมปศุสัตว์",
-        en: "Department of Livestock Development",
-      };
-    else if (line.includes("ประมง"))
-      agencyInfo = { th: "กรมประมง", en: "Department of Fisheries" };
-    else if (line.includes("โรงงาน"))
-      agencyInfo = {
-        th: "กรมโรงงานอุตสาหกรรม",
-        en: "Department of Industrial Works",
-      };
-    else if (line.includes("การค้าต่างประเทศ"))
-      agencyInfo = {
-        th: "กรมการค้าต่างประเทศ",
-        en: "Department of Foreign Trade",
-      };
-    else
-      agencyInfo = { th: "หน่วยงานควบคุมตามพิกัด", en: "Regulating Authority" };
+    unknownAgencies.set(agencyTaxId, (unknownAgencies.get(agencyTaxId) || 0) + 1);
+    agencyInfo = { th: "หน่วยงานควบคุมตามพิกัด", en: "Regulating Authority" };
   }
 
   // Formatted HS Code (08012100 -> 0801.21.00)
@@ -169,8 +133,9 @@ for (const line of lines) {
       en: agencyInfo.en,
     },
     regulation_case: {
-      th: "นำเข้า",
-      en: "Import",
+      key: caseInfo.key,
+      th: caseInfo.th,
+      en: caseInfo.en,
     },
     condition: {
       th: conditionTh,
@@ -181,6 +146,15 @@ for (const line of lines) {
   };
 
   flatPermitsList.push(record);
+}
+
+if (unknownAgencies.size > 0) {
+  console.warn(
+    `!! Unmapped agency tax IDs (fell back to "Regulating Authority"): ${[...unknownAgencies].map(([id, n]) => `${id || "<none>"} x${n}`).join(", ")}`,
+  );
+}
+if (skipped.length > 0) {
+  console.warn(`!! Skipped ${skipped.length} lines:\n   ${skipped.slice(0, 10).join("\n   ")}`);
 }
 
 const permitsByHs = groupBy(flatPermitsList, "raw_hs_code");
