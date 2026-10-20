@@ -115,6 +115,25 @@ for (const line of lines) {
   }
   const [, , rawStartDate, rawEndDate] = dateTail;
 
+  // Name of the statistical code: Thai text, then the English text, in fixed
+  // columns after the "00000000000.000" amount, followed by the notice number
+  // ("85/2569") and the dates. Either name can be empty.
+  const nameParts = (
+    line
+      .substring(15)
+      .replace(/\d{24}\s*$/, "")
+      .match(/\d{11}\.\d{3}\s{3}(.*)$/)?.[1] ?? ""
+  )
+    .trim()
+    .split(/\s{3,}/);
+  if (nameParts.length > 0 && /^[\d/]+$/.test(nameParts[nameParts.length - 1])) {
+    nameParts.pop();
+  }
+  const statDescription = {
+    th: nameParts[0] ?? "",
+    en: nameParts[1] ?? "",
+  };
+
   let agencyInfo = AGENCY_TAX_MAP[agencyTaxId];
   if (!agencyInfo) {
     unknownAgencies.set(agencyTaxId, (unknownAgencies.get(agencyTaxId) || 0) + 1);
@@ -128,6 +147,7 @@ for (const line of lines) {
     hs_code: formattedHs,
     raw_hs_code: rawHs,
     stat_code: statCode,
+    stat_description: statDescription,
     issuing_agency: {
       th: agencyInfo.th,
       en: agencyInfo.en,
